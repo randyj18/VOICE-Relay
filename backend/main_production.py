@@ -42,14 +42,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS - Only allow your domain in production
+# CORS - Allow development and production origins
 ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Development
-    "https://app.voice-relay.app",  # Production app
+    "http://localhost:3000",      # Web development
+    "http://localhost:8081",      # React Native dev
+    "http://localhost:9000",      # React Native alternate
+    "exp://localhost:19000",      # Expo development
+    "https://app.voice-relay.app", # Production app
 ]
 
+# In production, accept Replit and other deployment hosts
 if ENVIRONMENT == 'production':
-    ALLOWED_ORIGINS = ["https://app.voice-relay.app"]
+    ALLOWED_ORIGINS = [
+        "https://app.voice-relay.app",
+        # Replit apps (pattern: https://{app}.{username}.repl.co)
+        # Allow all Replit origins for now
+        "https://*.repl.co",
+    ]
 
 app.add_middleware(
     CORSMiddleware,

@@ -62,8 +62,14 @@ export class AuthService {
       }
 
       // Initialize API service
+      // API_BASE_URL supports environment variables or defaults to localhost
+      const apiBaseUrl = process.env.REACT_APP_API_URL ||
+                         (process.env.NODE_ENV === 'production'
+                           ? 'https://voice-relay-backend.YOUR_USERNAME.repl.co'
+                           : 'http://localhost:9000');
+
       this.apiService = initializeApiService({
-        baseURL: 'http://localhost:8000', // TODO: Load from config
+        baseURL: apiBaseUrl,
         timeout: 30000,
         githubToken: request.githubToken,
       });

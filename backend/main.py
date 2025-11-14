@@ -92,20 +92,27 @@ def verify_github_token(authorization: Optional[str]) -> str:
 
     Returns: user_id
     """
+    print(f"[DEBUG] Authorization header received: {repr(authorization)}")
+
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 
     token = authorization.replace("Bearer ", "").strip()
+    print(f"[DEBUG] Token after Bearer removal: {repr(token)}")
 
     # Demo: Parse user_id from token format "github|<user_id>|<token>"
     if not token.startswith("github|"):
+        print(f"[DEBUG] Token does not start with 'github|'")
         raise HTTPException(status_code=401, detail="Invalid token format")
 
     parts = token.split("|")
+    print(f"[DEBUG] Split parts: {parts}, count: {len(parts)}")
+
     if len(parts) != 3:
         raise HTTPException(status_code=401, detail="Invalid token format")
 
     user_id = parts[1]
+    print(f"[DEBUG] Extracted user_id: {user_id}")
     return user_id
 
 

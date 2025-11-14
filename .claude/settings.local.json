@@ -7,7 +7,13 @@
       "Bash(pkill:*)",
       "Bash(git rm:*)",
       "Bash(lsof:*)",
-      "Bash(fuser:*)"
+      "Bash(fuser:*)",
+      "Bash(xargs kill:*)",
+      "Bash(tasklist:*)",
+      "Bash(python -m uvicorn:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

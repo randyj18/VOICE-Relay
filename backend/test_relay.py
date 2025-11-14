@@ -13,7 +13,7 @@ import asyncio
 from typing import Optional
 
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:9000"
 DEMO_USER_ID = "testuser123"
 DEMO_TOKEN = f"Bearer github|{DEMO_USER_ID}|fake_token_abc123"
 

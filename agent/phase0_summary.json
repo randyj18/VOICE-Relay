@@ -1,0 +1,8 @@
+{
+  "app_public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArqqri9aHnFf+esnR/fKk\nIVGVRBYvWYYqW9Dx6slk++yuJVwJPihaUVvlv08otgn1AjlkwzldellhofG1Ln1h\nixiyggiX8eCoT8HRa8qVXMySGA3VP/m9Y6gSX5ArHmfckuuMcaWAjsoKleq4i0v/\ntIjW7H2Yoi/+n7K5b9HT56NW6ZNSgHS5AvMne9FBJHXVCTr5qXkgGYeYOy+iOxBz\nuTE7GmhuUnZHRzErUq87+wyqV58PKBDTCo76ULvzuALdbcuOMFreWuvKDx1hmOMH\na0BbsGVGwZGEpzTyMhs9KlKmLoTsL7mYfXFd18h6RjIah0QmYIj/1n/CXETKyGHZ\n6wIDAQAB\n-----END PUBLIC KEY-----\n",
+  "temp_public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmAxGUEuY2KSbiNxWS7LN\nuW8MV/Kqo1VmSwGF7lX7oFllTzGui28yBiqHp75bYtclFCdV6hajylt1vqwwKuPS\nxU4UdJAX3YDdp4hG62b5n789I3rM6T8PcSQ0Kbq9DXMUnhCKW8o+Q5yNV+2Y0kwi\nW3gO6g+FG1M8VnsYtxhvnG6p+X5z7i8JLUMAwYVXNPx4v9oqUj9FMbmQ952p0zjU\nwLYkGdfzppcucaysRxZVKd7gTco2VFAiMVhVXTS+yJU4sE668a2TR0O11iYIcLD8\ncBN+/oL4DoF/fCi6isGV14G0ASGngdkC5g8yDA5dAT2U3QSNIsbusuqdA1k03kQ/\nVQIDAQAB\n-----END PUBLIC KEY-----\n",
+  "original_prompt": "hello world",
+  "decrypted_prompt": "hello world",
+  "decrypted_reply": "Hello from React Native!",
+  "success": true
+}

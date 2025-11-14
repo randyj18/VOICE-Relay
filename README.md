@@ -44,6 +44,29 @@ python agent.py
 
 ---
 
+## Testing
+
+See [TESTING.md](TESTING.md) for comprehensive testing procedures covering:
+- **Phase 0**: E2EE encryption round-trip
+- **Phase 1**: Backend API endpoints
+- **Phase 2-5**: Mobile app functionality (auth, decryption, voice, UI, monetization)
+- **End-to-End**: Full integration test scenarios
+- **Debugging**: Tips for troubleshooting issues
+
+### Quick Test
+```bash
+# Test encryption
+cd agent && python agent.py
+
+# Test backend
+cd backend && python test_relay.py
+
+# Test mobile app
+cd app && npm start && npm run android
+```
+
+---
+
 ## Project Structure
 
 ```

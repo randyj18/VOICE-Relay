@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(git init:*)",
+      "Bash(pip install:*)",
+      "Bash(python agent.py:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n[Phase 0] Implement E2EE proof of concept with Python and React Native\n\nThis commit establishes the foundation for end-to-end encryption (E2EE) across\nthe VOICE Relay system. It proves that encryption/decryption works correctly\nbetween a Python agent and a React Native app.\n\nKey components:\n- Python crypto_utils: Hybrid RSA+AES-256-GCM encryption\n- Python agent: Generates keys, creates Work Order, encrypts with app''s public key\n- React Native CryptoUtils: TypeScript bindings using node-forge\n- React Native App: UI for key generation, decryption, and reply encryption\n\nArchitecture:\n1. App generates permanent RSA key pair (stored securely)\n2. Agent generates ephemeral RSA key pair (one-time use per request)\n3. Agent encrypts Work Order with app''s public key\n4. App decrypts with its private key, reads prompt\n5. App encrypts reply with agent''s ephemeral public key\n6. Agent decrypts reply with its ephemeral private key\n\nSecurity properties:\n- Hybrid encryption (RSA wraps AES key, AES encrypts payload)\n- RSA-OAEP with SHA256 padding\n- AES-256-GCM for authenticated encryption\n- Zero-knowledge: Server never sees plaintext\n- One-time ephemeral keys per transaction\n\nSuccess criteria met:\n- E2EE round-trip: \"hello world\" -> encryption -> decryption -> \"hello world\"\n- Python agent fully functional\n- React Native structure ready for Phase 1\n\nFollowing the North Star: Simplicity & Speed\n- No bloat, only essential E2EE implementation\n- Ready to scale to real backend in Phase 1\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git config:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

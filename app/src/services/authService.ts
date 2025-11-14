@@ -62,11 +62,9 @@ export class AuthService {
       }
 
       // Initialize API service
-      // API_BASE_URL supports environment variables or defaults to localhost
+      // API_BASE_URL supports environment variables or defaults to localhost/Replit
       const apiBaseUrl = process.env.REACT_APP_API_URL ||
-                         (process.env.NODE_ENV === 'production'
-                           ? 'https://voice-relay-backend.YOUR_USERNAME.repl.co'
-                           : 'http://localhost:9000');
+                         'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
 
       this.apiService = initializeApiService({
         baseURL: apiBaseUrl,

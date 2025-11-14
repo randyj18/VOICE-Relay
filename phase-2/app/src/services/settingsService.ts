@@ -129,4 +129,61 @@ export class SettingsService {
   static isValidMessageLimit(limit: number): boolean {
     return limit >= 1 && limit <= 10000;
   }
+
+  /**
+   * Increment message usage after successful reply submission
+   */
+  static async incrementMessageUsage(): Promise<number> {
+    return await SecureStorage.incrementMessageUsage();
+  }
+
+  /**
+   * Check if message limit has been exceeded
+   */
+  static async isLimitExceeded(): Promise<boolean> {
+    // Check for monthly reset first
+    await SecureStorage.checkAndResetIfNeeded();
+
+    const settings = await this.getSettings();
+    const used = settings.messages_used || 0;
+    const limit = settings.messages_limit || 100;
+    return used >= limit;
+  }
+
+  /**
+   * Get usage percentage (0-100)
+   */
+  static async getUsagePercentage(): Promise<number> {
+    // Check for monthly reset first
+    await SecureStorage.checkAndResetIfNeeded();
+
+    const settings = await this.getSettings();
+    const used = settings.messages_used || 0;
+    const limit = settings.messages_limit || 100;
+    return Math.round((used / limit) * 100);
+  }
+
+  /**
+   * Get remaining messages
+   */
+  static async getRemainingMessages(): Promise<number> {
+    // Check for monthly reset first
+    await SecureStorage.checkAndResetIfNeeded();
+
+    const settings = await this.getSettings();
+    const used = settings.messages_used || 0;
+    const limit = settings.messages_limit || 100;
+    return Math.max(0, limit - used);
+  }
+
+  /**
+   * Get messages used
+   */
+  static async getMessagesUsed(): Promise<number> {
+    // Check for monthly reset first
+    await SecureStorage.checkAndResetIfNeeded();
+
+    const settings = await this.getSettings();
+    return settings.messages_used || 0;
+  }
 }

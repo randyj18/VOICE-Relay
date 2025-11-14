@@ -27,6 +27,7 @@ import { SettingsService } from '../services/settingsService';
 import { SecureStorage } from '../storage/secureStorage';
 import { AppSettings } from '../types';
 import { getNavigationService } from '../services/navigationService';
+import { Linking as LinkingModule } from 'react-native';
 
 interface SettingsScreenProps {
   onLogout?: () => void;
@@ -35,7 +36,8 @@ interface SettingsScreenProps {
 
 function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [messageCount, setMessageCount] = useState(0);
+  const [messagesUsed, setMessagesUsed] = useState(0);
+  const [usagePercentage, setUsagePercentage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const navigationService = getNavigationService();
 
@@ -51,10 +53,12 @@ function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
       setIsLoading(true);
 
       const appSettings = await SettingsService.getSettings();
-      const messages = await SecureStorage.loadMessageQueue();
+      const used = await SettingsService.getMessagesUsed();
+      const percentage = await SettingsService.getUsagePercentage();
 
       setSettings(appSettings);
-      setMessageCount(messages.length);
+      setMessagesUsed(used);
+      setUsagePercentage(percentage);
     } catch (error) {
       Alert.alert('Error', `Failed to load settings: ${error}`);
     } finally {
@@ -171,23 +175,30 @@ function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
 
           <View style={styles.statsBox}>
             <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Messages</Text>
-              <Text style={styles.statValue}>{messageCount}</Text>
+              <Text style={styles.statLabel}>Sent This Month</Text>
+              <Text style={styles.statValue}>{messagesUsed}</Text>
             </View>
 
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Free Tier</Text>
               <Text style={styles.statValue}>
-                {Math.max(0, settings.messages_limit - messageCount)} / {settings.messages_limit}
+                {messagesUsed} / {settings?.messages_limit || 100}
               </Text>
             </View>
           </View>
 
-          {messageCount > settings.messages_limit * 0.8 && (
+          {usagePercentage >= 80 && usagePercentage < 100 && (
             <View style={styles.warningBox}>
               <Text style={styles.warningText}>
-                ⚠️ You're using {Math.round((messageCount / settings.messages_limit) * 100)}%
-                of your free tier
+                ⚠️ You're using {usagePercentage}% of your free tier. Upgrade soon!
+              </Text>
+            </View>
+          )}
+
+          {usagePercentage >= 100 && (
+            <View style={[styles.warningBox, { borderLeftColor: '#D32F2F', backgroundColor: '#FFEBEE' }]}>
+              <Text style={[styles.warningText, { color: '#B71C1C' }]}>
+                [LIMIT REACHED] Monthly message limit reached. Upgrade to continue!
               </Text>
             </View>
           )}

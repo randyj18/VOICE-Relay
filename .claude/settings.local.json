@@ -25,7 +25,8 @@
       "Bash(python -m json.tool:*)",
       "Bash(taskkill:*)",
       "Bash(nul)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(dir \"c:\\VSCode\\VOICE-Relay\\phase-4\"\")"
     ],
     "deny": [],
     "ask": []

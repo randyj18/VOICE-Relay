@@ -13,6 +13,7 @@
 import { CryptoUtils } from '../utils/crypto';
 import { SecureStorage } from '../storage/secureStorage';
 import { ApiService } from './api';
+import { SettingsService } from './settingsService';
 import { WorkOrder, StoredMessage, MessageStatus } from '../types';
 
 export class MessageService {
@@ -115,6 +116,7 @@ export class MessageService {
   /**
    * Submit encrypted reply to destination
    * Marks message as replied in local queue
+   * Increments message usage counter
    */
   async submitReply(messageId: string, encryptedReply: string): Promise<boolean> {
     try {
@@ -137,6 +139,9 @@ export class MessageService {
 
       // Mark as replied
       await SecureStorage.updateMessageStatus(messageId, MessageStatus.REPLIED);
+
+      // Increment message usage counter for monetization tracking
+      await SettingsService.incrementMessageUsage();
 
       return true;
     } catch (error) {

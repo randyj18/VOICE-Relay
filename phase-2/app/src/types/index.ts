@@ -78,4 +78,6 @@ export interface AppSettings {
   relay_url: string;
   relay_timeout_ms: number;
   messages_limit: number;
+  messages_used?: number; // Track messages sent this month
+  messages_reset_date?: number; // Unix timestamp of last reset
 }

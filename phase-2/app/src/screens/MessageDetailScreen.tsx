@@ -23,6 +23,7 @@ import {
 
 import { getMessageService } from '../services/messageService';
 import { SecureStorage } from '../storage/secureStorage';
+import { SettingsService } from '../services/settingsService';
 import { StoredMessage, MessageStatus } from '../types';
 import { getNavigationService } from '../services/navigationService';
 
@@ -90,6 +91,31 @@ function MessageDetailScreen(props: MessageDetailScreenProps): React.JSX.Element
 
     try {
       setIsLoading(true);
+
+      // Check if limit has been exceeded
+      const limitExceeded = await SettingsService.isLimitExceeded();
+      if (limitExceeded) {
+        Alert.alert(
+          'Free Tier Limit Reached',
+          'You have reached your monthly message limit (100 prompts). Upgrade to continue!',
+          [
+            {
+              text: 'Upgrade on Ko-fi',
+              onPress: () => {
+                // Would open Ko-fi link in production
+                Alert.alert('Support', 'Visit https://ko-fi.com/voicerelay to upgrade!');
+              },
+            },
+            {
+              text: 'OK',
+              onPress: () => {},
+              style: 'cancel',
+            },
+          ]
+        );
+        setIsLoading(false);
+        return;
+      }
 
       await messageService.submitReply(message.id, userReply);
 

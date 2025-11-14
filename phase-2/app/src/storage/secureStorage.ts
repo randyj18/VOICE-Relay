@@ -264,4 +264,53 @@ export class SecureStorage {
       return false;
     }
   }
+
+  /**
+   * Increment message usage counter
+   */
+  static async incrementMessageUsage(): Promise<number> {
+    try {
+      const settings = await this.loadSettings();
+      const newCount = (settings.messages_used || 0) + 1;
+      settings.messages_used = newCount;
+      settings.messages_reset_date = settings.messages_reset_date || Date.now();
+      await this.saveSettings(settings);
+      return newCount;
+    } catch (error) {
+      throw new Error(`Failed to increment message usage: ${error}`);
+    }
+  }
+
+  /**
+   * Reset monthly message usage
+   */
+  static async resetMonthlyUsage(): Promise<void> {
+    try {
+      const settings = await this.loadSettings();
+      settings.messages_used = 0;
+      settings.messages_reset_date = Date.now();
+      await this.saveSettings(settings);
+    } catch (error) {
+      throw new Error(`Failed to reset usage: ${error}`);
+    }
+  }
+
+  /**
+   * Check if monthly reset is needed (30 days since last reset)
+   */
+  static async checkAndResetIfNeeded(): Promise<boolean> {
+    try {
+      const settings = await this.loadSettings();
+      const resetDate = settings.messages_reset_date || Date.now();
+      const daysSinceReset = (Date.now() - resetDate) / (1000 * 60 * 60 * 24);
+
+      if (daysSinceReset >= 30) {
+        await this.resetMonthlyUsage();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      throw new Error(`Failed to check reset: ${error}`);
+    }
+  }
 }

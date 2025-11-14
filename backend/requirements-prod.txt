@@ -1,0 +1,31 @@
+# VOICE Relay - Production Requirements
+
+# Web framework
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+
+# Environment configuration
+python-dotenv==1.0.0
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# HTTP client
+httpx==0.25.1
+
+# Encryption (for any local operations)
+cryptography==41.0.7
+
+# Firebase (for push notifications)
+firebase-admin==6.2.0
+
+# Monitoring
+sentry-sdk==1.38.0
+
+# Logging
+python-json-logger==2.0.7
+
+# Utilities
+pyyaml==6.0.1

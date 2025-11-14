@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: voice-relay-db
+    environment:
+      POSTGRES_DB: voice_relay
+      POSTGRES_USER: voice_relay
+      POSTGRES_PASSWORD: secure_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voice_relay"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # VOICE Relay Backend
+  backend:
+    build: ./backend
+    container_name: voice-relay-backend
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://voice_relay:secure_password_change_me@postgres:5432/voice_relay
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      SENTRY_DSN: ${SENTRY_DSN}
+    ports:
+      - "8000:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -4,29 +4,10 @@
   },
   "permissions": {
     "allow": [
-      "Bash",
-      "Bash*",
-      "Bash(docker compose:*)",
-      "Bash(curl:*)",
-      "Bash(python3:*)",
-      "Bash(docker exec:*)",
-      "Bash(docker logs:*)",
-      "Bash(python:*)",
-      "Bash(git restore:*)",
-      "Bash(find:*)",
-      "Bash(awk:*)",
-      "Bash(docker inspect:*)",
-      "Bash(docker stop:*)",
-      "Bash(docker rm:*)",
-      "Bash(docker search:*)",
-      "Bash(pip install:*)",
-      "Bash(docker build:*)",
-      "WebSearch",
-      "Bash(python -m json.tool:*)",
-      "Bash(taskkill:*)",
-      "Bash(nul)",
-      "Bash(git commit:*)",
-      "Bash(dir \"c:\\VSCode\\VOICE-Relay\\phase-4\"\")"
+      "Bash(pkill:*)",
+      "Bash(git rm:*)",
+      "Bash(lsof:*)",
+      "Bash(fuser:*)"
     ],
     "deny": [],
     "ask": []

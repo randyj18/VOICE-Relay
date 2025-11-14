@@ -433,15 +433,54 @@ VOICE-Relay/
   - "Support Developer" link (Ko-fi)
   - Usage tracking (Phase 5)
 
-### Phase 5: Monetization (Usage Limits)
-**Goal**: Implement free tier with 100-prompt limit
+### Phase 5: Monetization (Usage Limits) ✓
+
+**Status**: Complete
+
+**Goal**: Implement free tier with 100-prompt monthly limit and automatic reset
 
 **Deliverables**:
-- Track "prompts sent" (POST /agent/ask calls)
-- Show usage: "X / 100 prompts used"
-- Block submission when limit exceeded
-- Display upgrade prompt (Ko-fi link)
-- Monthly reset of counter
+- [phase-5/](phase-5/)
+  - `README.md`: Complete monetization architecture
+
+**Key Features**:
+✓ Track messages sent per month (rolling 30-day window)
+✓ Automatic monthly reset after 30 days
+✓ Display usage in Settings: "X / 100 prompts sent this month"
+✓ Warning box at 80%+ usage (orange, "Upgrade soon!")
+✓ Alert at 100% usage (red, "Limit Reached")
+✓ Block reply submission when limit exceeded
+✓ Show Ko-fi upgrade prompt
+✓ All tracking is local on device (no server visibility)
+
+**Architecture**:
+- Usage stored in AppSettings (messages_used, messages_reset_date)
+- SecureStorage methods: incrementMessageUsage(), resetMonthlyUsage(), checkAndResetIfNeeded()
+- SettingsService API: isLimitExceeded(), getUsagePercentage(), getRemainingMessages()
+- MessageService increments counter on submitReply() success
+- MessageDetailScreen checks limit before allowing send
+- SettingsScreen displays usage with warnings
+
+**Implementation Files**:
+- `types/index.ts`: Added messages_used, messages_reset_date to AppSettings
+- `storage/secureStorage.ts`: Usage tracking methods (increment, reset, check)
+- `services/settingsService.ts`: Usage API (check limit, percentage, remaining)
+- `services/messageService.ts`: Increment on submitReply()
+- `screens/MessageDetailScreen.tsx`: Limit check before send
+- `screens/SettingsScreen.tsx`: Display usage with warnings
+
+**Security & Privacy**:
+- Usage count ONLY stored locally on device
+- Server never sees or stores usage data
+- Each device tracks independently
+- No network calls for usage check (purely local)
+- Trusted client model (no server-side enforcement)
+
+**Monthly Reset Logic**:
+- Every SettingsService call checks if 30 days passed
+- If yes: Automatically reset messages_used to 0, update reset_date to now
+- User gets fresh 100 prompts for the month
+- Transparent to user (automatic)
 
 ---
 
@@ -546,9 +585,9 @@ npm run build:ios
 ✓ Phase 0: E2EE round-trip proven
 ✓ Phase 1: Relay backend stateless and zero-knowledge
 ✓ Phase 2: Core app with auth + decryption
-□ Phase 3: Voice mode working end-to-end
-□ Phase 4: Multi-screen UI functional
-□ Phase 5: Usage limits enforced
+✓ Phase 3: Voice mode working end-to-end
+✓ Phase 4: Multi-screen UI functional
+✓ Phase 5: Usage limits enforced (100 prompts/month)
 
 ### Security
 ✓ RSA-2048 with proper padding
@@ -610,5 +649,5 @@ For issues or suggestions:
 ---
 
 **Last Updated**: 2025-11-14
-**Status**: Phase 2 Complete - Ready for Phase 3
-**Next Steps**: Integrate TTS/STT for voice mode
+**Status**: ALL PHASES COMPLETE - Production Ready ✓
+**Next Steps**: Deploy to production, monitor usage, iterate on feedback

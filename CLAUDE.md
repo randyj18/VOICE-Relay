@@ -34,11 +34,20 @@ Commit Frequency: You MUST commit your changes after every single logical step o
 
 Commit Messages: Your commit messages MUST be detailed. They must explain what you changed and why you changed it in the context of the requirements.
 
-Pre-Commit Hooks: Before every commit, you MUST run a "North Star Check."
+Pre-Commit Hooks: Before every commit, a "North Star Check" hook runs automatically.
 
-Run: git hook --pre-commit check_north_star
+Hook: .git/hooks/pre-commit (created and installed)
 
-Function: This hook will be a simple script you create. It will pause the commit and require you to confirm that your changes are 100% aligned with the "Simplicity & Speed" North Star and do not add bloat.
+Function: This hook automatically checks:
+1. Documentation bloat (max 2 doc files per commit)
+2. Unnecessary dependencies
+3. Commit message quality
+4. Requires manual North Star alignment confirmation
+
+The hook PREVENTS commits that:
+- Add >2 documentation files at once
+- Have poor commit messages
+- Fail North Star checks
 
 3. Platform & Tech Stack
 

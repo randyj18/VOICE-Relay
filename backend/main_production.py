@@ -246,8 +246,7 @@ async def root():
 @app.post("/auth/get-public-key", response_model=GetPublicKeyResponse, tags=["Auth"])
 async def get_public_key(
     request: GetPublicKeyRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = None
+    authorization: Optional[str] = Header(None)
 ):
     """
     Get the app's public key for a user.

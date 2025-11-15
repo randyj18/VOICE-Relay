@@ -1,14 +1,3 @@
-module.exports = {
-  project: {
-    ios: {},
-    android: {},
-  },
-  transformer: {
-    getTransformOptions: async () => ({
-      transform: {
-        experimentalImportSupport: false,
-        inlineRequires: false,
-      },
-    }),
-  },
-};
+const {getDefaultConfig} = require('metro-config');
+
+module.exports = getDefaultConfig(__dirname);

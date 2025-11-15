@@ -1,0 +1,29 @@
+# Android
+app/android/.gradle/
+app/android/app/.cxx/
+app/android/app/build/
+*.apk
+*.aab
+
+# Node modules
+app/node_modules/
+node_modules/
+
+# Build outputs
+app/build/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

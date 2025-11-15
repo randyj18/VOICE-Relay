@@ -1,0 +1,13 @@
+pluginManagement {
+  repositories {
+    google()
+    gradlePluginPortal()
+    mavenCentral()
+  }
+  includeBuild("../node_modules/@react-native/gradle-plugin")
+}
+
+includeBuild("../node_modules/@react-native/gradle-plugin")
+
+rootProject.name = 'voice_relay'
+include ':app'

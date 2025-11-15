@@ -139,9 +139,9 @@ function MessageQueueScreen(props: MessageQueueScreenProps): React.JSX.Element {
           <View style={styles.messagesList}>
             <FlatList
               data={messages}
-              keyExtractor={item => item.id}
+              keyExtractor={(item: StoredMessage) => item.id}
               scrollEnabled={false}
-              renderItem={({ item, index }) => (
+              renderItem={({ item, index }: { item: StoredMessage; index: number }) => (
                 <TouchableOpacity
                   style={styles.messageItem}
                   onPress={() => handleMessagePress(item.id)}

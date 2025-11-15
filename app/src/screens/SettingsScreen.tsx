@@ -72,7 +72,7 @@ function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
   const handleAutoSendToggle = async (value: boolean) => {
     try {
       await SettingsService.setAutoSend(value);
-      setSettings(prev => prev ? { ...prev, auto_send: value } : null);
+      setSettings((prev: AppSettings | null) => prev ? { ...prev, auto_send: value } : null);
     } catch (error) {
       Alert.alert('Error', `Failed to update setting: ${error}`);
     }

@@ -86,7 +86,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
       switch (event.type) {
         case VoiceEventType.SPEECH_START:
-          setState(prev => ({
+          setState((prev: VoiceModeState) => ({
             ...prev,
             isListening: true,
             status: 'Listening...',
@@ -95,7 +95,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
         case VoiceEventType.PARTIAL_RESULTS:
           if (event.data && event.data.length > 0) {
-            setState(prev => ({
+            setState((prev: VoiceModeState) => ({
               ...prev,
               userReply: event.data![0],
               status: 'Hearing you...',
@@ -105,7 +105,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
         case VoiceEventType.RESULTS:
           if (event.data && event.data.length > 0) {
-            setState(prev => ({
+            setState((prev: VoiceModeState) => ({
               ...prev,
               userReply: event.data![0],
               isListening: false,
@@ -119,7 +119,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
           break;
 
         case VoiceEventType.SPEECH_END:
-          setState(prev => ({
+          setState((prev: VoiceModeState) => ({
             ...prev,
             isListening: false,
           }));
@@ -127,7 +127,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
         case VoiceEventType.ERROR:
           Alert.alert('Voice Recognition Error', event.error || 'Unknown error');
-          setState(prev => ({
+          setState((prev: VoiceModeState) => ({
             ...prev,
             isListening: false,
             status: `Error: ${event.error}`,
@@ -148,7 +148,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
    */
   const startVoiceMode = async () => {
     try {
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isLoading: true,
         status: 'Loading messages...',
@@ -161,7 +161,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
       if (decryptedMessages.length === 0) {
         Alert.alert('No Messages', 'No messages available for voice mode.');
-        setState(prev => ({
+        setState((prev: VoiceModeState) => ({
           ...prev,
           isActive: false,
           isLoading: false,
@@ -172,7 +172,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       // Load settings
       const settings = await SecureStorage.loadSettings();
 
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         totalMessages: decryptedMessages.length,
         autoSend: settings.auto_send,
@@ -183,7 +183,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       await processMessage(decryptedMessages[0], 0);
     } catch (error) {
       Alert.alert('Error', `Failed to start voice mode: ${error}`);
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isActive: false,
         isLoading: false,
@@ -196,7 +196,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
    */
   const processMessage = async (message: StoredMessage, index: number) => {
     try {
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         currentMessage: message,
         messageIndex: index,
@@ -213,7 +213,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       // Speak prompt
       const promptText = `New prompt from ${workOrder.topic}. ${workOrder.prompt}. You can say Retry, Read Back, or give your answer.`;
 
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         currentPrompt: workOrder.prompt,
         status: 'Speaking prompt...',
@@ -224,7 +224,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
       // Wait a moment, then start listening
       setTimeout(async () => {
-        setState(prev => ({
+        setState((prev: VoiceModeState) => ({
           ...prev,
           isSpeaking: false,
           status: 'Ready to listen...',
@@ -233,7 +233,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
         try {
           await voiceService.playBeep('start');
           await voiceService.startListening();
-          setState(prev => ({
+          setState((prev: VoiceModeState) => ({
             ...prev,
             isLoading: false,
             status: 'Listening for your reply...',
@@ -244,7 +244,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       }, 500);
     } catch (error) {
       Alert.alert('Error', `Failed to process message: ${error}`);
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isLoading: false,
       }));
@@ -261,7 +261,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
         return;
       }
 
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isLoading: true,
         status: 'Sending reply...',
@@ -291,7 +291,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       }
     } catch (error) {
       Alert.alert('Error', `Failed to send reply: ${error}`);
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isLoading: false,
         status: `Error: ${error}`,
@@ -304,7 +304,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
    */
   const handleRetry = async () => {
     try {
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         userReply: '',
         status: 'Retrying...',
@@ -315,7 +315,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
 
       setTimeout(async () => {
         await voiceService.startListening();
-        setState(prev => ({
+        setState((prev: VoiceModeState) => ({
           ...prev,
           status: 'Listening again...',
         }));
@@ -330,7 +330,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
    */
   const handleReadBack = async () => {
     try {
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         status: 'Reading back...',
         isSpeaking: true,
@@ -339,7 +339,7 @@ function VoiceModeScreen(props: VoiceModeScreenProps): React.JSX.Element {
       const readBackText = `Your answer was: ${state.userReply}. You can say Send, Read Back, or Retry.`;
       await voiceService.speak(readBackText);
 
-      setState(prev => ({
+      setState((prev: VoiceModeState) => ({
         ...prev,
         isSpeaking: false,
         status: 'Listening for confirmation...',

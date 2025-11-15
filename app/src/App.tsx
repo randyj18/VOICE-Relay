@@ -57,6 +57,7 @@ function App(): React.JSX.Element {
    * Initialize app on mount
    */
   useEffect(() => {
+    console.log('[App] Mounting app component');
     initializeApp();
   }, []);
 
@@ -65,23 +66,28 @@ function App(): React.JSX.Element {
    */
   const initializeApp = async () => {
     try {
-      setState(prev => ({ ...prev, status: 'Restoring session...' }));
+      console.log('[App] Initializing app...');
+      setState((prev: AppState) => ({ ...prev, status: 'Restoring session...' }));
 
+      console.log('[App] Attempting to restore session from storage');
       const authContext = await authService.restoreSession();
 
       if (authContext) {
+        console.log('[App] Session restored successfully, user authenticated');
         // User already logged in
         const messageService = initializeMessageService(authService.getApiService());
+        console.log('[App] Message service initialized');
         await loadMessages();
 
-        setState(prev => ({
+        setState((prev: AppState) => ({
           ...prev,
           isAuthenticated: true,
           status: 'Ready',
           isLoading: false,
         }));
       } else {
-        setState(prev => ({
+        console.log('[App] No session found, user needs to authenticate');
+        setState((prev: AppState) => ({
           ...prev,
           isAuthenticated: false,
           status: 'Please authenticate',
@@ -89,7 +95,8 @@ function App(): React.JSX.Element {
         }));
       }
     } catch (error) {
-      setState(prev => ({
+      console.error('[App] Initialization failed:', error);
+      setState((prev: AppState) => ({
         ...prev,
         status: `Error: ${error}`,
         isLoading: false,
@@ -102,20 +109,25 @@ function App(): React.JSX.Element {
    */
   const handleLogin = async () => {
     if (!state.githubToken.trim()) {
+      console.warn('[App] Login attempt with empty token');
       Alert.alert('Error', 'Please enter a GitHub token');
       return;
     }
 
     try {
-      setState(prev => ({ ...prev, isLoading: true, status: 'Logging in...' }));
+      console.log('[App] Login attempt initiated');
+      setState((prev: AppState) => ({ ...prev, isLoading: true, status: 'Logging in...' }));
 
+      console.log('[App] Calling authService.login()');
       await authService.login({
         githubToken: state.githubToken,
       });
 
+      console.log('[App] Login successful, initializing message service');
       const messageService = initializeMessageService(authService.getApiService());
+      console.log('[App] Message service initialized after login');
 
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         isAuthenticated: true,
         githubToken: '',
@@ -123,8 +135,9 @@ function App(): React.JSX.Element {
         isLoading: false,
       }));
     } catch (error) {
+      console.error('[App] Login failed:', error);
       Alert.alert('Login Failed', `${error}`);
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         isLoading: false,
         status: `Login failed: ${error}`,
@@ -137,11 +150,13 @@ function App(): React.JSX.Element {
    */
   const loadMessages = async () => {
     try {
+      console.log('[App] Loading messages from storage');
       const messageService = getMessageService();
       const messages = await SecureStorage.loadMessageQueue();
-      setState(prev => ({ ...prev, messages }));
+      console.log(`[App] Loaded ${messages.length} messages from queue`);
+      setState((prev: AppState) => ({ ...prev, messages }));
     } catch (error) {
-      console.error('Failed to load messages:', error);
+      console.error('[App] Failed to load messages:', error);
     }
   };
 
@@ -150,22 +165,26 @@ function App(): React.JSX.Element {
    */
   const handleSimulateMessage = async () => {
     try {
-      setState(prev => ({ ...prev, status: 'Simulating message reception...' }));
+      console.log('[App] Simulating message reception');
+      setState((prev: AppState) => ({ ...prev, status: 'Simulating message reception...' }));
 
       // Create a fake encrypted message for testing
       const fakeEncryptedMessage = 'x'.repeat(500);
+      console.log('[App] Created fake encrypted message payload');
 
       const messageService = getMessageService();
       const message = await messageService.receiveEncryptedMessage(fakeEncryptedMessage);
+      console.log(`[App] Message received with ID: ${message.id}`);
 
       await loadMessages();
 
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         status: `Message received: ${message.id}`,
         selectedMessage: message,
       }));
     } catch (error) {
+      console.error('[App] Failed to simulate message:', error);
       Alert.alert('Error', `Failed to receive message: ${error}`);
     }
   };
@@ -175,32 +194,37 @@ function App(): React.JSX.Element {
    */
   const handleDecryptMessage = async () => {
     if (!state.selectedMessage) {
+      console.warn('[App] Decrypt attempt with no message selected');
       Alert.alert('Error', 'No message selected');
       return;
     }
 
     try {
-      setState(prev => ({
+      console.log(`[App] Decrypting message: ${state.selectedMessage.id}`);
+      setState((prev: AppState) => ({
         ...prev,
         status: `Decrypting message ${state.selectedMessage?.id}...`,
         isLoading: true,
       }));
 
       const messageService = getMessageService();
+      console.log(`[App] Calling messageService.decryptMessage() for ID: ${state.selectedMessage.id}`);
       const workOrder = await messageService.decryptMessage(state.selectedMessage.id);
+      console.log(`[App] Message decrypted successfully. Topic: ${workOrder.topic}`);
 
       await loadMessages();
 
       Alert.alert('Success', `Decrypted: ${workOrder.prompt}`);
 
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         status: `Decrypted: "${workOrder.prompt}"`,
         isLoading: false,
       }));
     } catch (error) {
+      console.error(`[App] Failed to decrypt message ${state.selectedMessage?.id}:`, error);
       Alert.alert('Error', `Failed to decrypt: ${error}`);
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         status: `Error: ${error}`,
         isLoading: false,
@@ -213,17 +237,20 @@ function App(): React.JSX.Element {
    */
   const handleSubmitReply = async () => {
     if (!state.selectedMessage) {
+      console.warn('[App] Submit reply attempt with no message selected');
       Alert.alert('Error', 'No message selected');
       return;
     }
 
     if (!state.userReply.trim()) {
+      console.warn('[App] Submit reply attempt with empty reply');
       Alert.alert('Error', 'Please enter a reply');
       return;
     }
 
     try {
-      setState(prev => ({
+      console.log(`[App] Submitting reply for message: ${state.selectedMessage.id}`);
+      setState((prev: AppState) => ({
         ...prev,
         status: 'Encrypting and sending reply...',
         isLoading: true,
@@ -232,19 +259,23 @@ function App(): React.JSX.Element {
       const messageService = getMessageService();
 
       // Prepare (encrypt) reply
+      console.log('[App] Encrypting reply');
       const encryptedReply = await messageService.prepareReply(
         state.selectedMessage.id,
         state.userReply
       );
+      console.log('[App] Reply encrypted successfully');
 
       // Submit reply
+      console.log('[App] Sending encrypted reply');
       await messageService.submitReply(state.selectedMessage.id, encryptedReply);
+      console.log('[App] Reply submitted successfully');
 
       await loadMessages();
 
       Alert.alert('Success', 'Reply sent!');
 
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         status: 'Reply sent',
         userReply: '',
@@ -252,8 +283,9 @@ function App(): React.JSX.Element {
         isLoading: false,
       }));
     } catch (error) {
+      console.error(`[App] Failed to submit reply:`, error);
       Alert.alert('Error', `Failed to send reply: ${error}`);
-      setState(prev => ({
+      setState((prev: AppState) => ({
         ...prev,
         status: `Error: ${error}`,
         isLoading: false,
@@ -266,7 +298,9 @@ function App(): React.JSX.Element {
    */
   const handleLogout = async () => {
     try {
+      console.log('[App] Logout initiated');
       await authService.logout();
+      console.log('[App] User logged out successfully, clearing state');
       setState({
         isLoading: false,
         isAuthenticated: false,
@@ -277,6 +311,7 @@ function App(): React.JSX.Element {
         status: 'Logged out',
       });
     } catch (error) {
+      console.error('[App] Logout failed:', error);
       Alert.alert('Error', `Logout failed: ${error}`);
     }
   };
@@ -309,8 +344,8 @@ function App(): React.JSX.Element {
                 placeholderTextColor="#999"
                 secureTextEntry
                 value={state.githubToken}
-                onChangeText={text =>
-                  setState(prev => ({ ...prev, githubToken: text }))
+                onChangeText={(text: string) =>
+                  setState((prev: AppState) => ({ ...prev, githubToken: text }))
                 }
               />
 
@@ -355,9 +390,9 @@ function App(): React.JSX.Element {
             ) : (
               <FlatList
                 data={state.messages}
-                keyExtractor={item => item.id}
+                keyExtractor={(item: StoredMessage) => item.id}
                 scrollEnabled={false}
-                renderItem={({ item }) => (
+                renderItem={({ item }: { item: StoredMessage }) => (
                   <View
                     style={[
                       styles.messageItem,
@@ -369,7 +404,7 @@ function App(): React.JSX.Element {
                     <Button
                       title="Select"
                       onPress={() =>
-                        setState(prev => ({ ...prev, selectedMessage: item }))
+                        setState((prev: AppState) => ({ ...prev, selectedMessage: item }))
                       }
                       color="#34C759"
                     />
@@ -403,8 +438,8 @@ function App(): React.JSX.Element {
                     multiline
                     numberOfLines={4}
                     value={state.userReply}
-                    onChangeText={text =>
-                      setState(prev => ({ ...prev, userReply: text }))
+                    onChangeText={(text: string) =>
+                      setState((prev: AppState) => ({ ...prev, userReply: text }))
                     }
                   />
 

@@ -15,7 +15,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppKeyPair, AuthContext, StoredMessage, AppSettings } from '../types';
+import { AppKeyPair, AuthContext, StoredMessage, AppSettings, MessageStatus, WorkOrder } from "../types";
 
 const STORAGE_KEYS = {
   APP_PRIVATE_KEY: '@voice_relay:app_private_key',
@@ -147,8 +147,8 @@ export class SecureStorage {
    */
   static async updateMessageStatus(
     messageId: string,
-    status: string,
-    decryptedWorkOrder?: any
+    status: MessageStatus,
+    decryptedWorkOrder?: WorkOrder
   ): Promise<void> {
     try {
       const queue = await SecureStorage.loadMessageQueue();

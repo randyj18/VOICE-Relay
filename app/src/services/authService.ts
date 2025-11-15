@@ -62,9 +62,8 @@ export class AuthService {
       }
 
       // Initialize API service
-      // API_BASE_URL supports environment variables or defaults to localhost/Replit
-      const apiBaseUrl = process.env.REACT_APP_API_URL ||
-                         'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
+      // Using deployed Replit backend
+      const apiBaseUrl = 'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
 
       this.apiService = initializeApiService({
         baseURL: apiBaseUrl,
@@ -117,9 +116,9 @@ export class AuthService {
         return null;
       }
 
-      // Re-initialize API service
+      // Re-initialize API service with deployed Replit backend
       this.apiService = initializeApiService({
-        baseURL: 'http://localhost:8000',
+        baseURL: 'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev',
         timeout: 30000,
         githubToken: token,
       });

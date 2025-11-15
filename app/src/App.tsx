@@ -23,12 +23,22 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 
 import { getAuthService } from './services/authService';
 import { getMessageService, initializeMessageService } from './services/messageService';
 import { SecureStorage } from './storage/secureStorage';
 import { StoredMessage, MessageStatus, WorkOrder } from './types';
+import SettingsScreen from './screens/SettingsScreen';
+import { showSuccess, showError, showInfo, OperationMessages } from './utils/feedbackUtils';
+import { formatErrorMessage, classifyError } from './utils/errorUtils';
+import { validateGithubToken, validateReply, getCharacterCountStatus } from './utils/validationUtils';
+
+enum AppScreen {
+  HOME = 'home',
+  SETTINGS = 'settings',
+}
 
 interface AppState {
   isLoading: boolean;
@@ -38,6 +48,7 @@ interface AppState {
   selectedMessage: StoredMessage | null;
   userReply: string;
   status: string;
+  currentScreen: AppScreen;
 }
 
 function App(): React.JSX.Element {
@@ -49,6 +60,7 @@ function App(): React.JSX.Element {
     selectedMessage: null,
     userReply: '',
     status: 'Initializing...',
+    currentScreen: AppScreen.HOME,
   });
 
   const authService = getAuthService();
@@ -106,17 +118,24 @@ function App(): React.JSX.Element {
 
   /**
    * Handle login with GitHub token
+   * Validates token format and shows user-friendly error messages
    */
   const handleLogin = async () => {
-    if (!state.githubToken.trim()) {
-      console.warn('[App] Login attempt with empty token');
-      Alert.alert('Error', 'Please enter a GitHub token');
+    // Validate token format first
+    const tokenValidation = validateGithubToken(state.githubToken);
+    if (!tokenValidation.isValid) {
+      console.warn('[App] Token validation failed:', tokenValidation.error);
+      showError('Invalid Token', tokenValidation.error || 'Please enter a valid GitHub token');
       return;
     }
 
     try {
       console.log('[App] Login attempt initiated');
-      setState((prev: AppState) => ({ ...prev, isLoading: true, status: 'Logging in...' }));
+      setState((prev: AppState) => ({
+        ...prev,
+        isLoading: true,
+        status: OperationMessages.LOGIN_VALIDATING,
+      }));
 
       console.log('[App] Calling authService.login()');
       await authService.login({
@@ -131,16 +150,25 @@ function App(): React.JSX.Element {
         ...prev,
         isAuthenticated: true,
         githubToken: '',
-        status: 'Authenticated',
+        status: OperationMessages.LOGIN_SUCCESS,
         isLoading: false,
       }));
+
+      showSuccess(OperationMessages.LOGIN_SUCCESS);
     } catch (error) {
       console.error('[App] Login failed:', error);
-      Alert.alert('Login Failed', `${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'login' });
+      const classified = classifyError(error);
+
+      showError('Login Failed', errorMessage, {
+        showRetryButton: classified.isRetryable,
+        onRetry: handleLogin,
+      });
+
       setState((prev: AppState) => ({
         ...prev,
         isLoading: false,
-        status: `Login failed: ${error}`,
+        status: `Error: ${classified.userMessage}`,
       }));
     }
   };
@@ -191,11 +219,12 @@ function App(): React.JSX.Element {
 
   /**
    * Decrypt selected message
+   * Shows user-friendly errors and success feedback
    */
   const handleDecryptMessage = async () => {
     if (!state.selectedMessage) {
       console.warn('[App] Decrypt attempt with no message selected');
-      Alert.alert('Error', 'No message selected');
+      showError('No Message', 'Please select a message to decrypt');
       return;
     }
 
@@ -203,7 +232,7 @@ function App(): React.JSX.Element {
       console.log(`[App] Decrypting message: ${state.selectedMessage.id}`);
       setState((prev: AppState) => ({
         ...prev,
-        status: `Decrypting message ${state.selectedMessage?.id}...`,
+        status: OperationMessages.DECRYPT_DECRYPTING,
         isLoading: true,
       }));
 
@@ -214,19 +243,26 @@ function App(): React.JSX.Element {
 
       await loadMessages();
 
-      Alert.alert('Success', `Decrypted: ${workOrder.prompt}`);
+      setState((prev: AppState) => ({
+        ...prev,
+        status: OperationMessages.DECRYPT_SUCCESS,
+        isLoading: false,
+      }));
+
+      showSuccess(OperationMessages.DECRYPT_SUCCESS);
+    } catch (error) {
+      console.error(`[App] Failed to decrypt message ${state.selectedMessage?.id}:`, error);
+      const errorMessage = formatErrorMessage(error, { operation: 'decrypt message' });
+      const classified = classifyError(error);
+
+      showError('Decryption Failed', errorMessage, {
+        showRetryButton: classified.isRetryable,
+        onRetry: handleDecryptMessage,
+      });
 
       setState((prev: AppState) => ({
         ...prev,
-        status: `Decrypted: "${workOrder.prompt}"`,
-        isLoading: false,
-      }));
-    } catch (error) {
-      console.error(`[App] Failed to decrypt message ${state.selectedMessage?.id}:`, error);
-      Alert.alert('Error', `Failed to decrypt: ${error}`);
-      setState((prev: AppState) => ({
-        ...prev,
-        status: `Error: ${error}`,
+        status: `Error: ${classified.userMessage}`,
         isLoading: false,
       }));
     }
@@ -234,17 +270,20 @@ function App(): React.JSX.Element {
 
   /**
    * Submit reply
+   * Validates reply content, shows specific loading messages, and provides clear feedback
    */
   const handleSubmitReply = async () => {
     if (!state.selectedMessage) {
       console.warn('[App] Submit reply attempt with no message selected');
-      Alert.alert('Error', 'No message selected');
+      showError('No Message', 'Please select a message to reply to');
       return;
     }
 
-    if (!state.userReply.trim()) {
-      console.warn('[App] Submit reply attempt with empty reply');
-      Alert.alert('Error', 'Please enter a reply');
+    // Validate reply content
+    const replyValidation = validateReply(state.userReply);
+    if (!replyValidation.isValid) {
+      console.warn('[App] Reply validation failed:', replyValidation.error);
+      showError('Invalid Reply', replyValidation.error || 'Please enter a valid reply');
       return;
     }
 
@@ -252,7 +291,7 @@ function App(): React.JSX.Element {
       console.log(`[App] Submitting reply for message: ${state.selectedMessage.id}`);
       setState((prev: AppState) => ({
         ...prev,
-        status: 'Encrypting and sending reply...',
+        status: OperationMessages.ENCRYPT_ENCRYPTING,
         isLoading: true,
       }));
 
@@ -266,6 +305,12 @@ function App(): React.JSX.Element {
       );
       console.log('[App] Reply encrypted successfully');
 
+      // Update status to show sending
+      setState((prev: AppState) => ({
+        ...prev,
+        status: OperationMessages.SEND_SENDING,
+      }));
+
       // Submit reply
       console.log('[App] Sending encrypted reply');
       await messageService.submitReply(state.selectedMessage.id, encryptedReply);
@@ -273,21 +318,28 @@ function App(): React.JSX.Element {
 
       await loadMessages();
 
-      Alert.alert('Success', 'Reply sent!');
-
       setState((prev: AppState) => ({
         ...prev,
-        status: 'Reply sent',
+        status: OperationMessages.REPLY_SUCCESS,
         userReply: '',
         selectedMessage: null,
         isLoading: false,
       }));
+
+      showSuccess(OperationMessages.REPLY_SUCCESS);
     } catch (error) {
       console.error(`[App] Failed to submit reply:`, error);
-      Alert.alert('Error', `Failed to send reply: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'send reply' });
+      const classified = classifyError(error);
+
+      showError('Send Failed', errorMessage, {
+        showRetryButton: classified.isRetryable,
+        onRetry: handleSubmitReply,
+      });
+
       setState((prev: AppState) => ({
         ...prev,
-        status: `Error: ${error}`,
+        status: `Error: ${classified.userMessage}`,
         isLoading: false,
       }));
     }
@@ -295,12 +347,20 @@ function App(): React.JSX.Element {
 
   /**
    * Logout
+   * Clears all data and shows success feedback
    */
   const handleLogout = async () => {
     try {
       console.log('[App] Logout initiated');
+      setState((prev: AppState) => ({
+        ...prev,
+        status: 'Logging out...',
+        isLoading: true,
+      }));
+
       await authService.logout();
       console.log('[App] User logged out successfully, clearing state');
+
       setState({
         isLoading: false,
         isAuthenticated: false,
@@ -309,11 +369,38 @@ function App(): React.JSX.Element {
         selectedMessage: null,
         userReply: '',
         status: 'Logged out',
+        currentScreen: AppScreen.HOME,
       });
+
+      showSuccess('Logged out successfully');
     } catch (error) {
       console.error('[App] Logout failed:', error);
-      Alert.alert('Error', `Logout failed: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'logout' });
+
+      showError('Logout Failed', errorMessage);
+
+      setState((prev: AppState) => ({
+        ...prev,
+        status: `Error: ${formatErrorMessage(error)}`,
+        isLoading: false,
+      }));
     }
+  };
+
+  /**
+   * Navigate to Settings
+   */
+  const handleOpenSettings = () => {
+    console.log('[App] Opening Settings screen');
+    setState((prev: AppState) => ({ ...prev, currentScreen: AppScreen.SETTINGS }));
+  };
+
+  /**
+   * Navigate back from Settings
+   */
+  const handleCloseSettings = () => {
+    console.log('[App] Closing Settings screen');
+    setState((prev: AppState) => ({ ...prev, currentScreen: AppScreen.HOME }));
   };
 
   if (state.isLoading) {
@@ -367,13 +454,34 @@ function App(): React.JSX.Element {
     );
   }
 
-  // Authenticated view
+  // Show Settings screen if requested
+  if (state.isAuthenticated && state.currentScreen === AppScreen.SETTINGS) {
+    return (
+      <SettingsScreen
+        onLogout={handleLogout}
+        onBack={handleCloseSettings}
+      />
+    );
+  }
+
+  // Authenticated view (Home screen)
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
+      {/* Header with Settings button */}
+      <View style={styles.header}>
+        <Text style={styles.title}>VOICE Relay</Text>
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={handleOpenSettings}
+        >
+          <Text style={styles.settingsButtonText}>Settings</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentInsetAdjustmentBehavior="automatic">
         <View style={styles.content}>
-          <Text style={styles.title}>VOICE Relay</Text>
           <Text style={styles.subtitle}>Phase 2: Core App - Authenticated</Text>
 
           <View style={styles.statusBox}>
@@ -433,7 +541,12 @@ function App(): React.JSX.Element {
 
                   <Text style={styles.dataLabel}>Your Reply:</Text>
                   <TextInput
-                    style={styles.replyInput}
+                    style={[
+                      styles.replyInput,
+                      !validateReply(state.userReply).isValid &&
+                        state.userReply.length > 0 &&
+                        styles.replyInputError,
+                    ]}
                     placeholder="Type your reply here..."
                     multiline
                     numberOfLines={4}
@@ -443,10 +556,34 @@ function App(): React.JSX.Element {
                     }
                   />
 
+                  {/* Character counter */}
+                  <View style={styles.charCounterContainer}>
+                    <Text
+                      style={[
+                        styles.charCounter,
+                        getCharacterCountStatus(state.userReply.length).status === 'error' &&
+                          styles.charCounterError,
+                        getCharacterCountStatus(state.userReply.length).status === 'warning' &&
+                          styles.charCounterWarning,
+                      ]}
+                    >
+                      {getCharacterCountStatus(state.userReply.length).count}
+                    </Text>
+                    {validateReply(state.userReply).error &&
+                      state.userReply.length > 0 && (
+                        <Text style={styles.validationError}>
+                          {validateReply(state.userReply).error}
+                        </Text>
+                      )}
+                  </View>
+
                   <Button
                     title="Submit Reply"
                     onPress={handleSubmitReply}
-                    disabled={state.isLoading}
+                    disabled={
+                      state.isLoading ||
+                      !validateReply(state.userReply).isValid
+                    }
                     color="#FF9500"
                   />
                 </View>
@@ -510,6 +647,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  settingsButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 6,
+  },
+  settingsButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   content: {
     padding: 16,
   },
@@ -519,10 +677,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#333',
   },
   subtitle: {
     fontSize: 16,
@@ -578,11 +735,40 @@ const styles = StyleSheet.create({
     borderColor: '#CCC',
     borderRadius: 6,
     padding: 10,
-    marginBottom: 12,
+    marginBottom: 8,
     fontSize: 14,
     color: '#333',
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  replyInputError: {
+    borderColor: '#FF3B30',
+    borderWidth: 2,
+  },
+  charCounterContainer: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  charCounter: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '500',
+  },
+  charCounterWarning: {
+    color: '#FF9500',
+    fontWeight: '600',
+  },
+  charCounterError: {
+    color: '#FF3B30',
+    fontWeight: '600',
+  },
+  validationError: {
+    fontSize: 12,
+    color: '#FF3B30',
+    fontWeight: '500',
+    marginLeft: 8,
   },
   emptyText: {
     color: '#999',

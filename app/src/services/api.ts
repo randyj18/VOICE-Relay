@@ -11,6 +11,8 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { GetPublicKeyResponse, AskResponse } from '../types';
+import { retryWithBackoff } from '../utils/retryUtils';
+import { classifyError } from '../utils/errorUtils';
 
 export interface ApiConfig {
   baseURL: string;
@@ -70,15 +72,23 @@ export class ApiService {
 
   /**
    * Health check - Verify relay is online
+   * Includes automatic retry with backoff
    */
   async healthCheck(): Promise<boolean> {
-    try {
-      console.log('[API] Health check: GET /health');
-      const response = await this.client.get('/health');
-      console.log(`[API] Health check successful: ${response.status}`);
-      return response.status === 200;
-    } catch (error) {
-      console.error('[API] Health check failed:', error);
+    console.log('[API] Health check: GET /health');
+    const result = await retryWithBackoff(
+      () => this.client.get('/health'),
+      {
+        maxAttempts: 3,
+        initialDelayMs: 1000,
+      }
+    );
+
+    if (result.success) {
+      console.log('[API] Health check successful');
+      return true;
+    } else {
+      console.warn('[API] Health check failed after retries:', result.finalError);
       return false;
     }
   }
@@ -86,29 +96,39 @@ export class ApiService {
   /**
    * Get user's public key from the relay
    * This is used for the agent to encrypt work orders
+   * Includes retry logic for network failures
    */
   async getPublicKey(): Promise<string> {
-    try {
-      console.log('[API] Getting public key: POST /auth/get-public-key');
-      const response = await this.client.post<GetPublicKeyResponse>(
-        '/auth/get-public-key',
-        {}
-      );
+    console.log('[API] Getting public key: POST /auth/get-public-key');
 
-      if (!response.data.app_public_key) {
-        console.error('[API] Response missing app_public_key');
-        throw new Error('No public key in response');
+    const result = await retryWithBackoff(
+      async () => {
+        const response = await this.client.post<GetPublicKeyResponse>(
+          '/auth/get-public-key',
+          {}
+        );
+
+        if (!response.data.app_public_key) {
+          console.error('[API] Response missing app_public_key');
+          throw new Error('No public key in response');
+        }
+
+        console.log('[API] Public key retrieved successfully');
+        return response.data.app_public_key;
+      },
+      {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
       }
+    );
 
-      console.log('[API] Public key retrieved successfully');
-      return response.data.app_public_key;
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      console.error(`[API] Failed to get public key:`, axiosError.message);
-      throw new Error(
-        `Failed to get public key: ${axiosError.response?.status} ${axiosError.message}`
-      );
+    if (!result.success) {
+      const classified = classifyError(result.error);
+      console.error('[API] Failed to get public key:', classified.userMessage);
+      throw new Error(classified.userMessage);
     }
+
+    return result.data!;
   }
 
   /**
@@ -131,34 +151,53 @@ export class ApiService {
   /**
    * Submit encrypted reply to destination URL
    * (Agent or relay forwards this to the destination)
+   * Includes retry logic and better error messages
    */
   async submitReply(
     destinationUrl: string,
     httpMethod: string,
     encryptedReply: string
   ): Promise<boolean> {
-    try {
-      console.log(`[API] Submitting reply: ${httpMethod.toUpperCase()} ${destinationUrl}`);
-      const config = {
-        method: httpMethod.toLowerCase(),
-        url: destinationUrl,
-        data: {
-          encrypted_reply: encryptedReply,
-        },
-        timeout: 10000,
-      };
+    console.log(
+      `[API] Submitting reply: ${httpMethod.toUpperCase()} ${destinationUrl}`
+    );
 
-      console.log('[API] Sending encrypted reply to destination');
-      const response = await axios(config);
-      console.log(`[API] Reply submitted successfully: ${response.status}`);
-      return response.status >= 200 && response.status < 300;
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      console.error(`[API] Failed to submit reply:`, axiosError.message);
-      throw new Error(
-        `Failed to submit reply: ${axiosError.response?.status} ${axiosError.message}`
+    if (encryptedReply.length > 100000) {
+      const classified = classifyError(
+        'Message too large. Keep replies under 10,000 characters.'
       );
+      throw new Error(classified.userMessage);
     }
+
+    const result = await retryWithBackoff(
+      async () => {
+        const config = {
+          method: httpMethod.toLowerCase(),
+          url: destinationUrl,
+          data: {
+            encrypted_reply: encryptedReply,
+          },
+          timeout: 10000,
+        };
+
+        console.log('[API] Sending encrypted reply to destination');
+        const response = await axios(config);
+        console.log(`[API] Reply submitted successfully: ${response.status}`);
+        return response.status >= 200 && response.status < 300;
+      },
+      {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
+      }
+    );
+
+    if (!result.success) {
+      const classified = classifyError(result.error);
+      console.error('[API] Failed to submit reply:', classified.userMessage);
+      throw new Error(classified.userMessage);
+    }
+
+    return result.data!;
   }
 
   /**

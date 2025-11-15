@@ -15,6 +15,8 @@ import { SecureStorage } from '../storage/secureStorage';
 import { ApiService } from './api';
 import { SettingsService } from './settingsService';
 import { WorkOrder, StoredMessage, MessageStatus } from '../types';
+import { formatErrorMessage } from '../utils/errorUtils';
+import { validateReply, validateMessageId } from '../utils/validationUtils';
 
 export class MessageService {
   private apiService: ApiService;
@@ -117,17 +119,31 @@ export class MessageService {
       } catch (updateError) {
         console.error('[MessageService] Failed to update message status to ERROR:', updateError);
       }
-      throw new Error(`Failed to decrypt message: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'decrypt message' });
+      throw new Error(errorMessage);
     }
   }
 
   /**
    * Prepare and encrypt reply
    * Returns encrypted reply ready to send
+   * Validates reply content before encryption
    */
   async prepareReply(messageId: string, userReply: string): Promise<string> {
     try {
       console.log(`[MessageService] Preparing reply for message: ${messageId}`);
+
+      // Validate reply content
+      console.log('[MessageService] Validating reply...');
+      const replyValidation = validateReply(userReply);
+      if (!replyValidation.isValid) {
+        console.error('[MessageService] Reply validation failed:', replyValidation.error);
+        throw new Error(replyValidation.error);
+      }
+      if (replyValidation.warning) {
+        console.warn('[MessageService] Reply warning:', replyValidation.warning);
+      }
+
       // Get decrypted work order
       console.log('[MessageService] Loading message queue');
       const queue = await SecureStorage.loadMessageQueue();
@@ -152,7 +168,8 @@ export class MessageService {
       return encryptedReply;
     } catch (error) {
       console.error('[MessageService] Failed to prepare reply:', error);
-      throw new Error(`Failed to prepare reply: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'encrypt reply' });
+      throw new Error(errorMessage);
     }
   }
 
@@ -200,7 +217,8 @@ export class MessageService {
       return true;
     } catch (error) {
       console.error('[MessageService] Failed to submit reply:', error);
-      throw new Error(`Failed to submit reply: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'send reply' });
+      throw new Error(errorMessage);
     }
   }
 

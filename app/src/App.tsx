@@ -23,12 +23,88 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 
 import { getAuthService } from './services/authService';
 import { getMessageService, initializeMessageService } from './services/messageService';
 import { SecureStorage } from './storage/secureStorage';
 import { StoredMessage, MessageStatus, WorkOrder } from './types';
+import SettingsScreen from './screens/SettingsScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
+import { showSuccess, showError, showInfo, OperationMessages } from './utils/feedbackUtils';
+import { formatErrorMessage, classifyError } from './utils/errorUtils';
+import { validateGithubToken, validateReply, getCharacterCountStatus } from './utils/validationUtils';
+
+/**
+ * Format timestamp to relative time (e.g., "2 minutes ago")
+ */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diffMs = now - timestamp;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) {
+    return 'Just now';
+  } else if (diffMin < 60) {
+    return `${diffMin} min${diffMin !== 1 ? 's' : ''} ago`;
+  } else if (diffHr < 24) {
+    return `${diffHr} hr${diffHr !== 1 ? 's' : ''} ago`;
+  } else {
+    return `${diffDay} day${diffDay !== 1 ? 's' : ''} ago`;
+  }
+}
+
+/**
+ * Get status badge configuration (emoji, color, label)
+ */
+function getStatusBadge(status: MessageStatus): { emoji: string; color: string; label: string } {
+  switch (status) {
+    case MessageStatus.ENCRYPTED:
+      return { emoji: '🔒', color: '#FF3B30', label: 'Unread' };
+    case MessageStatus.DECRYPTED:
+      return { emoji: '📖', color: '#007AFF', label: 'Reading' };
+    case MessageStatus.REPLIED:
+      return { emoji: '✅', color: '#34C759', label: 'Complete' };
+    case MessageStatus.ERROR:
+      return { emoji: '⚠️', color: '#FF9500', label: 'Error' };
+    default:
+      return { emoji: '❓', color: '#8E8E93', label: 'Unknown' };
+  }
+}
+
+/**
+ * Sort messages: unread first, then by timestamp (newest first)
+ */
+function sortMessages(messages: StoredMessage[]): StoredMessage[] {
+  return [...messages].sort((a, b) => {
+    // Priority order: encrypted > decrypted > replied/error
+    const statusPriority = {
+      [MessageStatus.ENCRYPTED]: 0,
+      [MessageStatus.DECRYPTED]: 1,
+      [MessageStatus.REPLIED]: 2,
+      [MessageStatus.ERROR]: 2,
+    };
+
+    const aPriority = statusPriority[a.status];
+    const bPriority = statusPriority[b.status];
+
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority;
+    }
+
+    // Within same priority, sort by timestamp (newest first)
+    return b.created_at - a.created_at;
+  });
+}
+
+enum AppScreen {
+  HOME = 'home',
+  SETTINGS = 'settings',
+}
 
 interface AppState {
   isLoading: boolean;
@@ -38,6 +114,9 @@ interface AppState {
   selectedMessage: StoredMessage | null;
   userReply: string;
   status: string;
+  currentScreen: AppScreen;
+  decryptingMessageId: string | null;
+  sendingReply: boolean;
 }
 
 function App(): React.JSX.Element {
@@ -49,8 +128,12 @@ function App(): React.JSX.Element {
     selectedMessage: null,
     userReply: '',
     status: 'Initializing...',
+    currentScreen: AppScreen.HOME,
+    decryptingMessageId: null,
+    sendingReply: false,
   });
 
+  const replyInputRef = React.useRef<TextInput>(null);
   const authService = getAuthService();
 
   /**
@@ -106,17 +189,24 @@ function App(): React.JSX.Element {
 
   /**
    * Handle login with GitHub token
+   * Validates token format and shows user-friendly error messages
    */
   const handleLogin = async () => {
-    if (!state.githubToken.trim()) {
-      console.warn('[App] Login attempt with empty token');
-      Alert.alert('Error', 'Please enter a GitHub token');
+    // Validate token format first
+    const tokenValidation = validateGithubToken(state.githubToken);
+    if (!tokenValidation.isValid) {
+      console.warn('[App] Token validation failed:', tokenValidation.error);
+      showError('Invalid Token', tokenValidation.error || 'Please enter a valid GitHub token');
       return;
     }
 
     try {
       console.log('[App] Login attempt initiated');
-      setState((prev: AppState) => ({ ...prev, isLoading: true, status: 'Logging in...' }));
+      setState((prev: AppState) => ({
+        ...prev,
+        isLoading: true,
+        status: OperationMessages.LOGIN_VALIDATING,
+      }));
 
       console.log('[App] Calling authService.login()');
       await authService.login({
@@ -131,16 +221,25 @@ function App(): React.JSX.Element {
         ...prev,
         isAuthenticated: true,
         githubToken: '',
-        status: 'Authenticated',
+        status: OperationMessages.LOGIN_SUCCESS,
         isLoading: false,
       }));
+
+      showSuccess(OperationMessages.LOGIN_SUCCESS);
     } catch (error) {
       console.error('[App] Login failed:', error);
-      Alert.alert('Login Failed', `${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'login' });
+      const classified = classifyError(error);
+
+      showError('Login Failed', errorMessage, {
+        showRetryButton: classified.isRetryable,
+        onRetry: handleLogin,
+      });
+
       setState((prev: AppState) => ({
         ...prev,
         isLoading: false,
-        status: `Login failed: ${error}`,
+        status: `Error: ${classified.userMessage}`,
       }));
     }
   };
@@ -181,8 +280,10 @@ function App(): React.JSX.Element {
       setState((prev: AppState) => ({
         ...prev,
         status: `Message received: ${message.id}`,
-        selectedMessage: message,
       }));
+
+      // Auto-select and decrypt the new message
+      handleSelectMessage(message);
     } catch (error) {
       console.error('[App] Failed to simulate message:', error);
       Alert.alert('Error', `Failed to receive message: ${error}`);
@@ -190,61 +291,93 @@ function App(): React.JSX.Element {
   };
 
   /**
-   * Decrypt selected message
+   * Select a message and auto-decrypt if needed
+   * Shows user-friendly errors and success feedback
    */
-  const handleDecryptMessage = async () => {
-    if (!state.selectedMessage) {
-      console.warn('[App] Decrypt attempt with no message selected');
-      Alert.alert('Error', 'No message selected');
-      return;
-    }
+  const handleSelectMessage = async (message: StoredMessage) => {
+    console.log(`[App] Message selected: ${message.id}, status: ${message.status}`);
 
-    try {
-      console.log(`[App] Decrypting message: ${state.selectedMessage.id}`);
-      setState((prev: AppState) => ({
-        ...prev,
-        status: `Decrypting message ${state.selectedMessage?.id}...`,
-        isLoading: true,
-      }));
+    // Set as selected immediately
+    setState((prev: AppState) => ({
+      ...prev,
+      selectedMessage: message,
+      userReply: '', // Clear any previous reply
+    }));
 
-      const messageService = getMessageService();
-      console.log(`[App] Calling messageService.decryptMessage() for ID: ${state.selectedMessage.id}`);
-      const workOrder = await messageService.decryptMessage(state.selectedMessage.id);
-      console.log(`[App] Message decrypted successfully. Topic: ${workOrder.topic}`);
+    // Auto-decrypt if encrypted
+    if (message.status === MessageStatus.ENCRYPTED) {
+      try {
+        console.log(`[App] Auto-decrypting message: ${message.id}`);
+        setState((prev: AppState) => ({
+          ...prev,
+          decryptingMessageId: message.id,
+          status: OperationMessages.DECRYPT_DECRYPTING,
+        }));
 
-      await loadMessages();
+        const messageService = getMessageService();
+        console.log(`[App] Calling messageService.decryptMessage() for ID: ${message.id}`);
+        const workOrder = await messageService.decryptMessage(message.id);
+        console.log(`[App] Message decrypted successfully. Topic: ${workOrder.topic}`);
 
-      Alert.alert('Success', `Decrypted: ${workOrder.prompt}`);
+        await loadMessages();
 
-      setState((prev: AppState) => ({
-        ...prev,
-        status: `Decrypted: "${workOrder.prompt}"`,
-        isLoading: false,
-      }));
-    } catch (error) {
-      console.error(`[App] Failed to decrypt message ${state.selectedMessage?.id}:`, error);
-      Alert.alert('Error', `Failed to decrypt: ${error}`);
-      setState((prev: AppState) => ({
-        ...prev,
-        status: `Error: ${error}`,
-        isLoading: false,
-      }));
+        // Find the updated message and select it
+        const updatedMessages = await SecureStorage.loadMessageQueue();
+        const updatedMessage = updatedMessages.find(m => m.id === message.id);
+
+        setState((prev: AppState) => ({
+          ...prev,
+          decryptingMessageId: null,
+          selectedMessage: updatedMessage || null,
+          status: OperationMessages.DECRYPT_SUCCESS,
+        }));
+
+        // Auto-focus reply input after decrypt
+        setTimeout(() => {
+          replyInputRef.current?.focus();
+        }, 100);
+
+        showSuccess(OperationMessages.DECRYPT_SUCCESS);
+      } catch (error) {
+        console.error(`[App] Failed to decrypt message ${message.id}:`, error);
+        const errorMessage = formatErrorMessage(error, { operation: 'decrypt message' });
+        const classified = classifyError(error);
+
+        showError('Decryption Failed', errorMessage, {
+          showRetryButton: classified.isRetryable,
+          onRetry: () => handleSelectMessage(message),
+        });
+
+        setState((prev: AppState) => ({
+          ...prev,
+          decryptingMessageId: null,
+          status: `Error: ${classified.userMessage}`,
+        }));
+      }
+    } else if (message.status === MessageStatus.DECRYPTED) {
+      // Auto-focus reply input for already decrypted messages
+      setTimeout(() => {
+        replyInputRef.current?.focus();
+      }, 100);
     }
   };
 
   /**
    * Submit reply
+   * Validates reply content, shows specific loading messages, and provides clear feedback
    */
   const handleSubmitReply = async () => {
     if (!state.selectedMessage) {
       console.warn('[App] Submit reply attempt with no message selected');
-      Alert.alert('Error', 'No message selected');
+      showError('No Message', 'Please select a message to reply to');
       return;
     }
 
-    if (!state.userReply.trim()) {
-      console.warn('[App] Submit reply attempt with empty reply');
-      Alert.alert('Error', 'Please enter a reply');
+    // Validate reply content
+    const replyValidation = validateReply(state.userReply);
+    if (!replyValidation.isValid) {
+      console.warn('[App] Reply validation failed:', replyValidation.error);
+      showError('Invalid Reply', replyValidation.error || 'Please enter a valid reply');
       return;
     }
 
@@ -252,8 +385,8 @@ function App(): React.JSX.Element {
       console.log(`[App] Submitting reply for message: ${state.selectedMessage.id}`);
       setState((prev: AppState) => ({
         ...prev,
-        status: 'Encrypting and sending reply...',
-        isLoading: true,
+        status: OperationMessages.ENCRYPT_ENCRYPTING,
+        sendingReply: true,
       }));
 
       const messageService = getMessageService();
@@ -266,6 +399,12 @@ function App(): React.JSX.Element {
       );
       console.log('[App] Reply encrypted successfully');
 
+      // Update status to show sending
+      setState((prev: AppState) => ({
+        ...prev,
+        status: OperationMessages.SEND_SENDING,
+      }));
+
       // Submit reply
       console.log('[App] Sending encrypted reply');
       await messageService.submitReply(state.selectedMessage.id, encryptedReply);
@@ -273,34 +412,49 @@ function App(): React.JSX.Element {
 
       await loadMessages();
 
-      Alert.alert('Success', 'Reply sent!');
+      setState((prev: AppState) => ({
+        ...prev,
+        status: OperationMessages.REPLY_SUCCESS,
+        userReply: '',
+        selectedMessage: null,
+        sendingReply: false,
+      }));
+
+      showSuccess(OperationMessages.REPLY_SUCCESS);
+    } catch (error) {
+      console.error(`[App] Failed to submit reply:`, error);
+      const errorMessage = formatErrorMessage(error, { operation: 'send reply' });
+      const classified = classifyError(error);
+
+      showError('Send Failed', errorMessage, {
+        showRetryButton: classified.isRetryable,
+        onRetry: handleSubmitReply,
+      });
 
       setState((prev: AppState) => ({
         ...prev,
-        status: 'Reply sent',
-        userReply: '',
-        selectedMessage: null,
-        isLoading: false,
-      }));
-    } catch (error) {
-      console.error(`[App] Failed to submit reply:`, error);
-      Alert.alert('Error', `Failed to send reply: ${error}`);
-      setState((prev: AppState) => ({
-        ...prev,
-        status: `Error: ${error}`,
-        isLoading: false,
+        status: `Error: ${classified.userMessage}`,
+        sendingReply: false,
       }));
     }
   };
 
   /**
    * Logout
+   * Clears all data and shows success feedback
    */
   const handleLogout = async () => {
     try {
       console.log('[App] Logout initiated');
+      setState((prev: AppState) => ({
+        ...prev,
+        status: 'Logging out...',
+        isLoading: true,
+      }));
+
       await authService.logout();
       console.log('[App] User logged out successfully, clearing state');
+
       setState({
         isLoading: false,
         isAuthenticated: false,
@@ -309,11 +463,40 @@ function App(): React.JSX.Element {
         selectedMessage: null,
         userReply: '',
         status: 'Logged out',
+        currentScreen: AppScreen.HOME,
+        decryptingMessageId: null,
+        sendingReply: false,
       });
+
+      showSuccess('Logged out successfully');
     } catch (error) {
       console.error('[App] Logout failed:', error);
-      Alert.alert('Error', `Logout failed: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'logout' });
+
+      showError('Logout Failed', errorMessage);
+
+      setState((prev: AppState) => ({
+        ...prev,
+        status: `Error: ${formatErrorMessage(error)}`,
+        isLoading: false,
+      }));
     }
+  };
+
+  /**
+   * Navigate to Settings
+   */
+  const handleOpenSettings = () => {
+    console.log('[App] Opening Settings screen');
+    setState((prev: AppState) => ({ ...prev, currentScreen: AppScreen.SETTINGS }));
+  };
+
+  /**
+   * Navigate back from Settings
+   */
+  const handleCloseSettings = () => {
+    console.log('[App] Closing Settings screen');
+    setState((prev: AppState) => ({ ...prev, currentScreen: AppScreen.HOME }));
   };
 
   if (state.isLoading) {
@@ -367,13 +550,34 @@ function App(): React.JSX.Element {
     );
   }
 
-  // Authenticated view
+  // Show Settings screen if requested
+  if (state.isAuthenticated && state.currentScreen === AppScreen.SETTINGS) {
+    return (
+      <SettingsScreen
+        onLogout={handleLogout}
+        onBack={handleCloseSettings}
+      />
+    );
+  }
+
+  // Authenticated view (Home screen)
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
+      {/* Header with Settings button */}
+      <View style={styles.header}>
+        <Text style={styles.title}>VOICE Relay</Text>
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={handleOpenSettings}
+        >
+          <Text style={styles.settingsButtonText}>Settings</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentInsetAdjustmentBehavior="automatic">
         <View style={styles.content}>
-          <Text style={styles.title}>VOICE Relay</Text>
           <Text style={styles.subtitle}>Phase 2: Core App - Authenticated</Text>
 
           <View style={styles.statusBox}>
@@ -383,92 +587,157 @@ function App(): React.JSX.Element {
 
           {/* Messages */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Messages ({state.messages.length})</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Messages</Text>
+              {state.messages.filter((m: StoredMessage) => m.status === MessageStatus.ENCRYPTED).length > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>
+                    {state.messages.filter((m: StoredMessage) => m.status === MessageStatus.ENCRYPTED).length} unread
+                  </Text>
+                </View>
+              )}
+            </View>
 
             {state.messages.length === 0 ? (
-              <Text style={styles.emptyText}>No messages. Click "Simulate Message" to test.</Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateEmoji}>📭</Text>
+                <Text style={styles.emptyStateTitle}>No messages yet</Text>
+                <Text style={styles.emptyStateText}>
+                  Waiting for messages...{'\n'}
+                  Click "Simulate Message" to test the app
+                </Text>
+              </View>
             ) : (
               <FlatList
-                data={state.messages}
+                data={sortMessages(state.messages)}
                 keyExtractor={(item: StoredMessage) => item.id}
                 scrollEnabled={false}
-                renderItem={({ item }: { item: StoredMessage }) => (
-                  <View
-                    style={[
-                      styles.messageItem,
-                      item.id === state.selectedMessage?.id && styles.messageItemSelected,
-                    ]}
-                  >
-                    <Text style={styles.messageId}>{item.id.substring(0, 20)}...</Text>
-                    <Text style={styles.messageStatus}>{item.status}</Text>
-                    <Button
-                      title="Select"
-                      onPress={() =>
-                        setState((prev: AppState) => ({ ...prev, selectedMessage: item }))
-                      }
-                      color="#34C759"
-                    />
-                  </View>
-                )}
+                renderItem={({ item }: { item: StoredMessage }) => {
+                  const badge = getStatusBadge(item.status);
+                  const isSelected = item.id === state.selectedMessage?.id;
+                  const isDecrypting = item.id === state.decryptingMessageId;
+                  const promptPreview = item.decrypted_work_order?.prompt
+                    ? item.decrypted_work_order.prompt.substring(0, 50) +
+                      (item.decrypted_work_order.prompt.length > 50 ? '...' : '')
+                    : null;
+
+                  return (
+                    <TouchableOpacity
+                      onPress={() => handleSelectMessage(item)}
+                      style={[
+                        styles.messageCard,
+                        isSelected && styles.messageCardSelected,
+                      ]}
+                      disabled={isDecrypting}
+                    >
+                      <View style={styles.messageCardHeader}>
+                        <View style={styles.messageCardTopic}>
+                          <Text style={styles.messageTopicText} numberOfLines={1}>
+                            {item.topic || 'Untitled'}
+                          </Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: badge.color }]}>
+                          <Text style={styles.statusBadgeText}>
+                            {badge.emoji} {badge.label}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.messageCardBody}>
+                        <Text style={styles.messageTimestamp}>
+                          {formatRelativeTime(item.created_at)}
+                        </Text>
+                        {promptPreview && (
+                          <Text style={styles.messagePreview} numberOfLines={2}>
+                            {promptPreview}
+                          </Text>
+                        )}
+                        {isDecrypting && (
+                          <View style={styles.decryptingIndicator}>
+                            <ActivityIndicator size="small" color="#007AFF" />
+                            <Text style={styles.decryptingText}>Decrypting...</Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
               />
             )}
           </View>
 
           {/* Selected Message Details */}
-          {state.selectedMessage && (
+          {state.selectedMessage && state.selectedMessage.decrypted_work_order && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Selected Message</Text>
+              <Text style={styles.sectionTitle}>Reply to Message</Text>
 
-              {state.selectedMessage.decrypted_work_order ? (
-                <View style={styles.dataBox}>
-                  <Text style={styles.dataLabel}>Topic:</Text>
-                  <Text style={styles.dataText}>
-                    {state.selectedMessage.decrypted_work_order.topic}
+              <View style={styles.promptBox}>
+                <Text style={styles.promptLabel}>Topic</Text>
+                <Text style={styles.promptTopic}>
+                  {state.selectedMessage.decrypted_work_order.topic}
+                </Text>
+
+                <Text style={styles.promptLabel}>Prompt</Text>
+                <Text style={styles.promptText}>
+                  {state.selectedMessage.decrypted_work_order.prompt}
+                </Text>
+              </View>
+
+              <View style={styles.replyBox}>
+                <View style={styles.replyHeader}>
+                  <Text style={styles.replyLabel}>Your Reply</Text>
+                  <Text
+                    style={[
+                      styles.charCounter,
+                      getCharacterCountStatus(state.userReply.length).status === 'error' &&
+                        styles.charCounterError,
+                      getCharacterCountStatus(state.userReply.length).status === 'warning' &&
+                        styles.charCounterWarning,
+                    ]}
+                  >
+                    {getCharacterCountStatus(state.userReply.length).count}
                   </Text>
-
-                  <Text style={styles.dataLabel}>Prompt:</Text>
-                  <Text style={styles.dataText}>
-                    {state.selectedMessage.decrypted_work_order.prompt}
+                </View>
+                <TextInput
+                  ref={replyInputRef}
+                  style={[
+                    styles.replyInput,
+                    !validateReply(state.userReply).isValid &&
+                      state.userReply.length > 0 &&
+                      styles.replyInputError,
+                  ]}
+                  placeholder="Type your reply here..."
+                  placeholderTextColor="#999"
+                  multiline
+                  numberOfLines={6}
+                  value={state.userReply}
+                  onChangeText={(text: string) =>
+                    setState((prev: AppState) => ({ ...prev, userReply: text }))
+                  }
+                  textAlignVertical="top"
+                />
+                {validateReply(state.userReply).error && state.userReply.length > 0 && (
+                  <Text style={styles.validationError}>
+                    {validateReply(state.userReply).error}
                   </Text>
+                )}
 
-                  <Text style={styles.dataLabel}>Your Reply:</Text>
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder="Type your reply here..."
-                    multiline
-                    numberOfLines={4}
-                    value={state.userReply}
-                    onChangeText={(text: string) =>
-                      setState((prev: AppState) => ({ ...prev, userReply: text }))
-                    }
-                  />
-
-                  <Button
-                    title="Submit Reply"
-                    onPress={handleSubmitReply}
-                    disabled={state.isLoading}
-                    color="#FF9500"
-                  />
-                </View>
-              ) : (
-                <View style={styles.dataBox}>
-                  <Text style={styles.dataLabel}>Message ID:</Text>
-                  <Text style={styles.dataText}>{state.selectedMessage.id}</Text>
-
-                  <Text style={styles.dataLabel}>Status:</Text>
-                  <Text style={styles.dataText}>{state.selectedMessage.status}</Text>
-
-                  <Button
-                    title="Decrypt"
-                    onPress={handleDecryptMessage}
-                    disabled={
-                      state.isLoading ||
-                      state.selectedMessage.status !== MessageStatus.ENCRYPTED
-                    }
-                    color="#34C759"
-                  />
-                </View>
-              )}
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    (!validateReply(state.userReply).isValid || state.sendingReply) &&
+                      styles.sendButtonDisabled,
+                  ]}
+                  onPress={handleSubmitReply}
+                  disabled={!validateReply(state.userReply).isValid || state.sendingReply}
+                >
+                  {state.sendingReply ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.sendButtonText}>Send Reply</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -510,6 +779,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  settingsButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 6,
+  },
+  settingsButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   content: {
     padding: 16,
   },
@@ -519,10 +809,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#333',
   },
   subtitle: {
     fontSize: 16,
@@ -551,11 +840,27 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
-    color: '#333',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  unreadBadge: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  unreadBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   authBox: {
     backgroundColor: '#FFF',
@@ -573,65 +878,203 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  replyInput: {
-    borderWidth: 1,
-    borderColor: '#CCC',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 12,
-    fontSize: 14,
-    color: '#333',
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  emptyText: {
-    color: '#999',
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  messageItem: {
+  emptyState: {
     backgroundColor: '#FFF',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 8,
-    borderWidth: 1,
+    padding: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
     borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
   },
-  messageItemSelected: {
+  emptyStateEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  messageCard: {
+    backgroundColor: '#FFF',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  messageCardSelected: {
     borderColor: '#007AFF',
     backgroundColor: '#F0F8FF',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  messageId: {
+  messageCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  messageCardTopic: {
+    flex: 1,
+    marginRight: 8,
+  },
+  messageTopicText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  messageCardBody: {
+    marginTop: 4,
+  },
+  messageTimestamp: {
     fontSize: 12,
-    fontFamily: 'monospace',
     color: '#666',
     marginBottom: 4,
   },
-  messageStatus: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginBottom: 8,
-  },
-  dataBox: {
-    backgroundColor: '#F3E5F5',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#9C27B0',
-  },
-  dataLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6A1B9A',
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  dataText: {
+  messagePreview: {
     fontSize: 13,
     color: '#333',
     lineHeight: 18,
+    marginTop: 4,
+  },
+  decryptingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  decryptingText: {
+    marginLeft: 8,
+    fontSize: 13,
+    color: '#007AFF',
+    fontStyle: 'italic',
+  },
+  promptBox: {
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#DEE2E6',
+  },
+  promptLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6C757D',
+    marginTop: 12,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  promptTopic: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  promptText: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 22,
+  },
+  replyBox: {
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  replyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  replyLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  charCounter: {
+    fontSize: 12,
+    color: '#666',
+  },
+  charCounterWarning: {
+    color: '#FF9500',
+    fontWeight: '600',
+  },
+  charCounterError: {
+    color: '#FF3B30',
+    fontWeight: '600',
+  },
+  replyInput: {
+    borderWidth: 1,
+    borderColor: '#CCC',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 15,
+    color: '#333',
+    minHeight: 120,
+    backgroundColor: '#FAFAFA',
+    textAlignVertical: 'top',
+  },
+  replyInputError: {
+    borderColor: '#FF3B30',
+    borderWidth: 2,
+  },
+  validationError: {
+    fontSize: 12,
+    color: '#FF3B30',
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  sendButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#CCC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  sendButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   buttonGroup: {
     marginBottom: 12,

@@ -13,6 +13,8 @@ import { CryptoUtils } from '../utils/crypto';
 import { SecureStorage } from '../storage/secureStorage';
 import { ApiService, initializeApiService } from './api';
 import { AuthContext } from '../types';
+import { classifyError, formatErrorMessage } from '../utils/errorUtils';
+import { validateGithubToken } from '../utils/validationUtils';
 
 export interface LoginRequest {
   githubToken: string;
@@ -25,14 +27,25 @@ export class AuthService {
 
   /**
    * Login with GitHub token
-   * 1. Verify token with relay
-   * 2. Generate keys if first time
-   * 3. Store token and keys
-   * 4. Initialize API service
+   * 1. Validate token format
+   * 2. Verify token with relay
+   * 3. Generate keys if first time
+   * 4. Store token and keys
+   * 5. Initialize API service
    */
   async login(request: LoginRequest): Promise<AuthContext> {
     try {
       console.log('[Auth] Login initiated');
+
+      // Validate token format first
+      console.log('[Auth] Validating token format...');
+      const tokenValidation = validateGithubToken(request.githubToken);
+      if (!tokenValidation.isValid) {
+        console.error('[Auth] Token validation failed:', tokenValidation.error);
+        throw new Error(tokenValidation.error);
+      }
+      console.log('[Auth] Token format valid');
+
       // Check if user already has keys
       console.log('[Auth] Checking for existing app keys...');
       const existingPrivateKey = await SecureStorage.loadAppPrivateKey();
@@ -57,6 +70,10 @@ export class AuthService {
         console.log('[Auth] Storing keys in secure storage');
         await SecureStorage.saveAppPrivateKey(privateKeyPem);
         await SecureStorage.saveAppPublicKey(publicKeyPem);
+        // Store key creation metadata
+        await SecureStorage.saveKeyPairMetadata({
+          created_at: Date.now(),
+        });
         console.log('[Auth] Key pair saved successfully');
       }
 
@@ -100,7 +117,8 @@ export class AuthService {
       return this.authContext;
     } catch (error) {
       console.error('[Auth] Login failed:', error);
-      throw new Error(`Login failed: ${error}`);
+      const errorMessage = formatErrorMessage(error, { operation: 'login' });
+      throw new Error(errorMessage);
     }
   }
 

@@ -7,8 +7,13 @@
     "ios": "react-native run-ios",
     "start": "react-native start",
     "test": "jest",
+    "test:types": "tsc --noEmit",
+    "test:lint": "eslint . --max-warnings 0",
+    "test:build": "cd android && ./gradlew assembleDebug",
+    "test:all": "npm run test:types && npm run test:lint && npm run test",
     "lint": "eslint .",
-    "build:android": "cd android && ./gradlew assembleRelease"
+    "build:android": "cd android && ./gradlew assembleRelease",
+    "build:debug": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "react": "18.2.0",

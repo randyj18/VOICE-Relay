@@ -8,6 +8,7 @@
  * - Audio feedback (beeps, confirmation)
  */
 
+import { Platform } from 'react-native';
 import Voice from 'react-native-voice';
 import Tts from 'react-native-tts';
 
@@ -152,6 +153,7 @@ export class VoiceService {
 
   /**
    * Speak text using TTS
+   * Uses platform-specific optimizations when available
    */
   async speak(text: string): Promise<void> {
     try {
@@ -162,14 +164,25 @@ export class VoiceService {
         await this.stopListening();
       }
 
-      await Tts.speak({
+      // Prepare TTS options with platform-specific parameters
+      const ttsOptions: any = {
         text,
-        androidParams: {
+      };
+
+      // Add platform-specific parameters
+      if (Platform.OS === 'android') {
+        // Android-specific TTS parameters for better audio control
+        ttsOptions.androidParams = {
           KEY_PARAM_PAN: -1,
           KEY_PARAM_VOLUME: 1,
           KEY_PARAM_STREAM: 'STREAM_MUSIC',
-        },
-      });
+        };
+      } else if (Platform.OS === 'ios') {
+        // iOS-specific TTS parameters (optional, uses system defaults if not set)
+        // Can be extended with iOS-specific properties if needed
+      }
+
+      await Tts.speak(ttsOptions);
     } catch (error) {
       throw new Error(`TTS failed: ${error}`);
     }

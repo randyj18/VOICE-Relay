@@ -15,7 +15,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppKeyPair, AuthContext, StoredMessage, AppSettings } from '../types';
+import { AppKeyPair, AuthContext, StoredMessage, AppSettings, MessageStatus, WorkOrder } from "../types";
 
 const STORAGE_KEYS = {
   APP_PRIVATE_KEY: '@voice_relay:app_private_key',
@@ -25,6 +25,7 @@ const STORAGE_KEYS = {
   MESSAGE_QUEUE: '@voice_relay:message_queue',
   SETTINGS: '@voice_relay:settings',
   LAST_SYNC: '@voice_relay:last_sync',
+  ONBOARDING_COMPLETE: '@voice_relay:onboarding_complete',
 };
 
 export class SecureStorage {
@@ -147,8 +148,8 @@ export class SecureStorage {
    */
   static async updateMessageStatus(
     messageId: string,
-    status: string,
-    decryptedWorkOrder?: any
+    status: MessageStatus,
+    decryptedWorkOrder?: WorkOrder
   ): Promise<void> {
     try {
       const queue = await SecureStorage.loadMessageQueue();
@@ -311,6 +312,29 @@ export class SecureStorage {
       return false;
     } catch (error) {
       throw new Error(`Failed to check reset: ${error}`);
+    }
+  }
+
+  /**
+   * Check if user has completed onboarding
+   */
+  static async hasCompletedOnboarding(): Promise<boolean> {
+    try {
+      const value = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETE);
+      return value === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mark onboarding as complete
+   */
+  static async setOnboardingComplete(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETE, 'true');
+    } catch (error) {
+      throw new Error(`Failed to save onboarding status: ${error}`);
     }
   }
 }

@@ -167,9 +167,9 @@ function HomeScreen(props: HomeScreenProps): React.JSX.Element {
             <Text style={styles.sectionTitle}>Topics ({topics.length})</Text>
             <FlatList
               data={topics}
-              keyExtractor={(item, index) => `${item.name}-${index}`}
+              keyExtractor={(item: Topic, index: number) => `${item.name}-${index}`}
               scrollEnabled={false}
-              renderItem={({ item }) => (
+              renderItem={({ item }: { item: Topic }) => (
                 <TouchableOpacity
                   style={styles.topicItem}
                   onPress={() => handleTopicPress(item.name)}

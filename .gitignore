@@ -5,6 +5,17 @@ app/android/app/build/
 *.apk
 *.aab
 
+# iOS
+ios/Pods/
+ios/build/
+ios/DerivedData/
+*.xcworkspace
+!ios/*.xcworkspace
+ios/*.xcuserstate
+ios/*.xcuserdatad
+ios/*.pbxuser
+ios/*.perspectivev3
+
 # Node modules
 app/node_modules/
 node_modules/
@@ -27,3 +38,10 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

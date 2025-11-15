@@ -32,7 +32,9 @@ export class AuthService {
    */
   async login(request: LoginRequest): Promise<AuthContext> {
     try {
+      console.log('[Auth] Login initiated');
       // Check if user already has keys
+      console.log('[Auth] Checking for existing app keys...');
       const existingPrivateKey = await SecureStorage.loadAppPrivateKey();
 
       let privateKeyPem: string;
@@ -40,6 +42,7 @@ export class AuthService {
 
       if (existingPrivateKey) {
         // Use existing keys
+        console.log('[Auth] Using existing app keys');
         privateKeyPem = existingPrivateKey;
         publicKeyPem = (await SecureStorage.loadAppPublicKey()) || '';
       } else {
@@ -48,34 +51,42 @@ export class AuthService {
         const keyPair = CryptoUtils.generateKeyPair();
         privateKeyPem = CryptoUtils.getPrivateKeyPem(keyPair.privateKey);
         publicKeyPem = CryptoUtils.getPublicKeyPem(keyPair.publicKey);
+        console.log('[Auth] New key pair generated');
 
         // Store keys
+        console.log('[Auth] Storing keys in secure storage');
         await SecureStorage.saveAppPrivateKey(privateKeyPem);
         await SecureStorage.saveAppPublicKey(publicKeyPem);
-        console.log('[Auth] Key pair saved');
+        console.log('[Auth] Key pair saved successfully');
       }
 
       // Save GitHub token
+      console.log('[Auth] Storing GitHub token');
       await SecureStorage.saveGithubToken(request.githubToken);
       if (request.userId) {
+        console.log(`[Auth] Storing user ID: ${request.userId}`);
         await SecureStorage.saveUserId(request.userId);
       }
 
       // Initialize API service
-      // API_BASE_URL supports environment variables or defaults to localhost/Replit
-      const apiBaseUrl = process.env.REACT_APP_API_URL ||
-                         'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
+      // Using deployed Replit backend
+      const apiBaseUrl = 'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
+      console.log('[Auth] Initializing API service with baseURL:', apiBaseUrl);
 
       this.apiService = initializeApiService({
         baseURL: apiBaseUrl,
         timeout: 30000,
         githubToken: request.githubToken,
       });
+      console.log('[Auth] API service initialized');
 
       // Verify connectivity
+      console.log('[Auth] Performing health check on relay');
       const isHealthy = await this.apiService.healthCheck();
-      if (!isHealthy) {
-        console.warn('[Auth] Relay health check failed');
+      if (isHealthy) {
+        console.log('[Auth] Relay health check passed');
+      } else {
+        console.warn('[Auth] Relay health check failed - relay may be offline');
       }
 
       // Create auth context
@@ -85,9 +96,10 @@ export class AuthService {
         authenticated: true,
       };
 
-      console.log('[Auth] Login successful');
+      console.log('[Auth] Login successful - user authenticated');
       return this.authContext;
     } catch (error) {
+      console.error('[Auth] Login failed:', error);
       throw new Error(`Login failed: ${error}`);
     }
   }
@@ -97,10 +109,14 @@ export class AuthService {
    */
   async isAuthenticated(): Promise<boolean> {
     try {
+      console.log('[Auth] Checking authentication status');
       const token = await SecureStorage.loadGithubToken();
       const privateKey = await SecureStorage.loadAppPrivateKey();
-      return !!(token && privateKey);
-    } catch {
+      const authenticated = !!(token && privateKey);
+      console.log(`[Auth] Authentication status: ${authenticated}`);
+      return authenticated;
+    } catch (error) {
+      console.error('[Auth] Error checking authentication status:', error);
       return false;
     }
   }
@@ -110,19 +126,24 @@ export class AuthService {
    */
   async restoreSession(): Promise<AuthContext | null> {
     try {
+      console.log('[Auth] Attempting to restore session from storage');
       const token = await SecureStorage.loadGithubToken();
       const userId = await SecureStorage.loadUserId();
 
       if (!token) {
+        console.log('[Auth] No GitHub token found in storage - session not available');
         return null;
       }
 
-      // Re-initialize API service
+      console.log('[Auth] GitHub token found, restoring API service');
+      // Re-initialize API service with deployed Replit backend
+      const apiBaseUrl = 'https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev';
       this.apiService = initializeApiService({
-        baseURL: 'http://localhost:8000',
+        baseURL: apiBaseUrl,
         timeout: 30000,
         githubToken: token,
       });
+      console.log('[Auth] API service re-initialized');
 
       this.authContext = {
         github_token: token,
@@ -130,7 +151,7 @@ export class AuthService {
         authenticated: true,
       };
 
-      console.log('[Auth] Session restored');
+      console.log('[Auth] Session restored successfully');
       return this.authContext;
     } catch (error) {
       console.error('[Auth] Failed to restore session:', error);
@@ -143,11 +164,14 @@ export class AuthService {
    */
   async logout(): Promise<void> {
     try {
+      console.log('[Auth] Logout initiated - clearing all stored data');
       await SecureStorage.clearAll();
+      console.log('[Auth] Secure storage cleared');
       this.authContext = null;
       this.apiService = null;
-      console.log('[Auth] Logged out');
+      console.log('[Auth] User logged out successfully');
     } catch (error) {
+      console.error('[Auth] Logout failed:', error);
       throw new Error(`Logout failed: ${error}`);
     }
   }
@@ -174,14 +198,20 @@ export class AuthService {
    */
   async updateGithubToken(newToken: string): Promise<void> {
     try {
+      console.log('[Auth] Updating GitHub token');
       await SecureStorage.saveGithubToken(newToken);
+      console.log('[Auth] New token saved to storage');
       if (this.apiService) {
         this.apiService.setGithubToken(newToken);
+        console.log('[Auth] API service token updated');
       }
       if (this.authContext) {
         this.authContext.github_token = newToken;
+        console.log('[Auth] Auth context token updated');
       }
+      console.log('[Auth] Token update completed successfully');
     } catch (error) {
+      console.error('[Auth] Failed to update token:', error);
       throw new Error(`Failed to update token: ${error}`);
     }
   }
@@ -191,19 +221,26 @@ export class AuthService {
    */
   async verifyKeys(): Promise<boolean> {
     try {
+      console.log('[Auth] Verifying app keys');
       const privateKeyPem = await SecureStorage.loadAppPrivateKey();
       const publicKeyPem = await SecureStorage.loadAppPublicKey();
 
       if (!privateKeyPem || !publicKeyPem) {
+        console.warn('[Auth] One or both keys missing');
         return false;
       }
 
+      console.log('[Auth] Keys found, validating PEM format');
       // Try to load them to verify they're valid PEM
       CryptoUtils.loadPrivateKeyFromPem(privateKeyPem);
+      console.log('[Auth] Private key validated');
       CryptoUtils.loadPublicKeyFromPem(publicKeyPem);
+      console.log('[Auth] Public key validated');
 
+      console.log('[Auth] Key verification successful');
       return true;
-    } catch {
+    } catch (error) {
+      console.error('[Auth] Key verification failed:', error);
       return false;
     }
   }

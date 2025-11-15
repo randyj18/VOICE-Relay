@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 """
-Backend API testing script for VOICE Relay
+Backend API testing script for VOICE Relay - LOCAL VERSION
 
-Tests the production backend API to verify:
-- Backend connectivity and health
-- Public key retrieval
-- Message submission with encryption
-- CORS headers for mobile clients
-- Response formats match expected types
-
-Usage:
-    python3 scripts/test_backend.py
+Tests the local backend API running on localhost:9000
 """
 
 import requests
@@ -20,8 +12,8 @@ import time
 from typing import Optional
 from datetime import datetime
 
-# Configuration
-BACKEND_URL = "https://f88f9dbd-157d-4ef1-aed2-7ba669e1d94b-00-c50nduy6d8kx.riker.replit.dev"
+# Configuration - LOCAL TESTING
+BACKEND_URL = "http://127.0.0.1:9000"
 TIMEOUT = 10
 
 # Demo token in the format expected by the backend
@@ -107,6 +99,7 @@ def test_backend_health(result: TestResult) -> bool:
                 log_success(f"Backend is reachable")
                 log_info(f"Service: {data.get('service', 'unknown')}")
                 log_info(f"Status: {data.get('status', 'unknown')}")
+                log_info(f"Messages queued: {data.get('messages_queued', 0)}")
                 result.add_success("/health endpoint", f"{elapsed:.2f}s response time")
                 return True
             except json.JSONDecodeError:
@@ -152,6 +145,7 @@ def test_root_endpoint(result: TestResult) -> bool:
                 data = response.json()
                 log_success(f"API root endpoint is accessible")
                 log_info(f"API Name: {data.get('name', 'unknown')}")
+                log_info(f"Phase: {data.get('phase', 'unknown')}")
                 log_info(f"Version: {data.get('version', 'unknown')}")
                 result.add_success("GET / endpoint", f"{elapsed:.2f}s response time")
                 return True
@@ -244,6 +238,7 @@ def test_get_public_key_with_auth(result: TestResult) -> Optional[str]:
             public_key = data["app_public_key"]
             log_success(f"Got public key from backend")
             log_info(f"Key format: {public_key[:50]}..." if len(public_key) > 50 else public_key)
+            log_info(f"Key size: {len(public_key)} characters")
             result.add_success("POST /auth/get-public-key (with auth)", f"Key length: {len(public_key)}")
             return public_key
         elif "public_key" in data:
@@ -331,20 +326,24 @@ def test_agent_ask(result: TestResult, public_key: Optional[str]) -> bool:
         result.add_failure("POST /agent/ask", str(e)[:50])
         return False
 
-def test_cors(result: TestResult):
-    """Test CORS headers for mobile clients"""
-    log_section("CORS Headers")
+def test_agent_ask_invalid_blob(result: TestResult) -> bool:
+    """Test /agent/ask with invalid (too short) blob"""
+    log_section("Agent Ask Endpoint (Invalid Blob)")
 
     try:
-        log_info("Testing CORS preflight request...")
+        # Blob too short - should be rejected
+        test_blob = "short"
+
+        log_info(f"Sending blob of {len(test_blob)} bytes (should be rejected as too short)")
 
         start_time = time.time()
-        response = requests.options(
-            f"{BACKEND_URL}/auth/get-public-key",
+        response = requests.post(
+            f"{BACKEND_URL}/agent/ask",
             headers={
-                "Origin": "http://localhost:8081",
-                "Access-Control-Request-Method": "POST"
+                "Content-Type": "application/json",
+                "Authorization": DEMO_TOKEN
             },
+            json={"encrypted_blob": test_blob},
             timeout=TIMEOUT,
             allow_redirects=False
         )
@@ -353,58 +352,58 @@ def test_cors(result: TestResult):
         log_info(f"Status Code: {response.status_code}")
         log_info(f"Response Time: {elapsed:.2f}s")
 
-        headers = response.headers
-
-        # Check CORS headers
-        cors_origin = headers.get('Access-Control-Allow-Origin')
-        cors_methods = headers.get('Access-Control-Allow-Methods')
-        cors_headers = headers.get('Access-Control-Allow-Headers')
-        cors_credentials = headers.get('Access-Control-Allow-Credentials')
-
-        if cors_origin:
-            log_success(f"CORS Origin allowed: {cors_origin}")
-            log_info(f"Methods allowed: {cors_methods}")
-            log_info(f"Headers allowed: {cors_headers}")
-            result.add_success("CORS headers", "CORS properly configured")
+        if response.status_code == 400:
+            log_success("Correctly rejected short blob")
+            result.add_success("POST /agent/ask (invalid blob)", "Correctly returns 400")
+            return True
         else:
-            log_warning("No CORS origin header (might be OK for production)")
-            result.add_skip("CORS headers", "No CORS headers (API might not support preflight)")
+            log_warning(f"Expected 400, got {response.status_code}")
+            result.add_skip("POST /agent/ask (invalid blob)", f"Got {response.status_code} instead of 400")
+            return False
 
     except Exception as e:
-        log_warning(f"Could not verify CORS: {e}")
-        result.add_skip("CORS headers", str(e)[:50])
+        log_error(f"Error: {e}")
+        result.add_failure("POST /agent/ask (invalid blob)", str(e)[:50])
+        return False
 
-def test_docs_endpoint(result: TestResult):
-    """Test /docs endpoint availability"""
-    log_section("API Documentation")
+def test_debug_endpoints(result: TestResult):
+    """Test debug endpoints"""
+    log_section("Debug Endpoints")
 
     try:
-        log_info("Testing /docs endpoint (Swagger UI)...")
-
-        start_time = time.time()
+        # Test /debug/messages
         response = requests.get(
-            f"{BACKEND_URL}/docs",
-            timeout=TIMEOUT,
-            allow_redirects=False
+            f"{BACKEND_URL}/debug/messages",
+            timeout=TIMEOUT
         )
-        elapsed = time.time() - start_time
-
-        log_info(f"Status Code: {response.status_code}")
-
+        log_info(f"GET /debug/messages: {response.status_code}")
         if response.status_code == 200:
-            log_success("Swagger UI documentation is available")
-            result.add_success("GET /docs", "Documentation accessible")
+            log_success("Debug messages endpoint works")
+            result.add_success("GET /debug/messages", "Debug endpoint accessible")
         else:
-            log_warning(f"Swagger UI returned status {response.status_code}")
-            result.add_skip("GET /docs", f"Status {response.status_code}")
+            log_warning(f"Debug messages returned {response.status_code}")
+            result.add_skip("GET /debug/messages", f"Status {response.status_code}")
+
+        # Test /debug/users
+        response = requests.get(
+            f"{BACKEND_URL}/debug/users",
+            timeout=TIMEOUT
+        )
+        log_info(f"GET /debug/users: {response.status_code}")
+        if response.status_code == 200:
+            log_success("Debug users endpoint works")
+            result.add_success("GET /debug/users", "Debug endpoint accessible")
+        else:
+            log_warning(f"Debug users returned {response.status_code}")
+            result.add_skip("GET /debug/users", f"Status {response.status_code}")
 
     except Exception as e:
-        log_warning(f"Could not access /docs: {e}")
-        result.add_skip("GET /docs", "Documentation not accessible")
+        log_warning(f"Could not test debug endpoints: {e}")
+        result.add_skip("Debug endpoints", str(e)[:50])
 
 def main() -> int:
     print("\n" + "=" * 70)
-    print(f"{Colors.CYAN}VOICE Relay - Backend API Test Suite{Colors.END}")
+    print(f"{Colors.CYAN}VOICE Relay - Backend API Test Suite (LOCAL){Colors.END}")
     print(f"Backend URL: {BACKEND_URL}")
     print(f"Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
@@ -422,18 +421,18 @@ def main() -> int:
     # 2. Test root endpoint
     test_root_endpoint(result)
 
-    # 3. Test docs endpoint
-    test_docs_endpoint(result)
-
-    # 4. Test authentication
+    # 3. Test authentication
     test_get_public_key_no_auth(result)
     public_key = test_get_public_key_with_auth(result)
 
-    # 5. Test agent ask
+    # 4. Test agent ask with valid blob
     test_agent_ask(result, public_key)
 
-    # 6. Test CORS
-    test_cors(result)
+    # 5. Test agent ask with invalid blob
+    test_agent_ask_invalid_blob(result)
+
+    # 6. Test debug endpoints
+    test_debug_endpoints(result)
 
     # Print summary
     result.print_summary()

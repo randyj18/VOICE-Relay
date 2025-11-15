@@ -26,7 +26,7 @@ import {
 import { SettingsService } from '../services/settingsService';
 import { SecureStorage } from '../storage/secureStorage';
 import { AppSettings } from '../types';
-import { getNavigationService } from '../services/navigationService';
+import { getNavigationService, AppScreen } from '../services/navigationService';
 import { Linking as LinkingModule } from 'react-native';
 
 interface SettingsScreenProps {
@@ -72,7 +72,7 @@ function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
   const handleAutoSendToggle = async (value: boolean) => {
     try {
       await SettingsService.setAutoSend(value);
-      setSettings(prev => prev ? { ...prev, auto_send: value } : null);
+      setSettings((prev: AppSettings | null) => prev ? { ...prev, auto_send: value } : null);
     } catch (error) {
       Alert.alert('Error', `Failed to update setting: ${error}`);
     }
@@ -106,7 +106,7 @@ function SettingsScreen(props: SettingsScreenProps): React.JSX.Element {
         onPress: async () => {
           try {
             await SecureStorage.clearAll();
-            navigationService.navigate(navigationService.constructor.name);
+            navigationService.navigate(AppScreen.LOGIN);
             if (props.onLogout) {
               props.onLogout();
             }

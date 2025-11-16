@@ -1,0 +1,72 @@
+name: phase2-jest-unit
+phase: 2
+goal: "Run Jest unit tests for utilities and services"
+category: "unit"
+
+prerequisites:
+  - "Node.js >= 18"
+  - "npm dependencies installed"
+  - "Jest configured in package.json"
+
+execution:
+  command: "npm test -- --passWithNoTests"
+  working_directory: "app/"
+  timeout: 60
+
+expected_outcome:
+  exit_code: 0
+  stdout_contains: "Tests:"
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Review Jest test failures in output"
+  - condition: "stdout contains 'FAIL'"
+    action: "Fix failing tests identified in output"
+  - condition: "stdout contains 'SyntaxError'"
+    action: "Fix syntax errors in test files"
+  - condition: "stdout contains 'Cannot find module'"
+    action: "Fix import paths or install missing dependencies"
+
+success_criteria:
+  - "All tests pass (or no tests if --passWithNoTests)"
+  - "No test failures"
+  - "Exit code is 0"
+
+debugging_steps:
+  - "Read Jest output for failed tests"
+  - "Each failure shows:"
+  - "  - Test file path"
+  - "  - Test name (describe/it blocks)"
+  - "  - Expected vs actual values"
+  - "  - Stack trace"
+  - "Common issues:"
+  - "  Async tests:"
+  - "    - Use async/await or return promises"
+  - "    - Don't forget to await async calls"
+  - "  Mocking:"
+  - "    - Ensure mocks are set up correctly"
+  - "    - Reset mocks between tests: jest.clearAllMocks()"
+  - "  Timeouts:"
+  - "    - Increase timeout: jest.setTimeout(10000)"
+  - "  Module resolution:"
+  - "    - Check jest.config.js moduleNameMapper"
+  - "    - Fix import paths"
+  - "Run specific test: npm test -- path/to/test.ts"
+  - "Run in watch mode: npm test -- --watch"
+  - "Run with coverage: npm test -- --coverage"
+
+validation:
+  - check: "Jest is installed"
+    command: "cd app && npm ls jest --depth=0"
+  - check: "package.json has test script"
+    command: "grep -q '\"test\"' app/package.json"
+  - check: "Jest config exists"
+    command: "test -f app/jest.config.js || grep -q jest app/package.json"
+
+metadata:
+  importance: "high"
+  estimated_duration: 30
+  can_run_in_ci: true
+  requires_network: false
+  blocks_deployment: false
+  watch_mode_available: true

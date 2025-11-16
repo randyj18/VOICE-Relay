@@ -1,0 +1,59 @@
+name: phase2-eslint-quality
+phase: 2
+goal: "Enforce code style and catch common errors with ESLint"
+category: "quality"
+
+prerequisites:
+  - "Node.js >= 18"
+  - "npm dependencies installed"
+  - "ESLint configured (.eslintrc.js or similar)"
+
+execution:
+  command: "npm run test:lint"
+  working_directory: "app/"
+  timeout: 30
+
+expected_outcome:
+  exit_code: 0
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Review ESLint violations and fix them"
+  - condition: "stdout contains 'error'"
+    action: "Fix ESLint errors (not just warnings)"
+  - condition: "stdout contains 'warning' and max-warnings is 0"
+    action: "Fix ESLint warnings or adjust max-warnings setting"
+
+success_criteria:
+  - "Zero ESLint errors"
+  - "Zero ESLint warnings (if max-warnings is 0)"
+  - "All .ts, .tsx, .js, .jsx files pass linting"
+  - "Exit code is 0"
+
+debugging_steps:
+  - "Read ESLint output to see violations"
+  - "Each violation shows: file:line:column - rule - message"
+  - "Common fixes:"
+  - "  - Run 'npm run lint -- --fix' for auto-fixable issues"
+  - "  - Check .eslintrc.js for rule configuration"
+  - "  - Disable rules inline only if absolutely necessary:"
+  - "    // eslint-disable-next-line rule-name"
+  - "  - For unused vars: Remove or prefix with underscore (_unusedVar)"
+  - "  - For console statements: Replace with proper logging"
+  - "Re-run: npm run test:lint"
+
+validation:
+  - check: "Node.js version >= 18"
+    command: "node --version | grep -E 'v(1[8-9]|2[0-9])'"
+  - check: "ESLint is installed"
+    command: "cd app && npm ls eslint --depth=0"
+  - check: "ESLint config exists"
+    command: "test -f app/.eslintrc.js || test -f app/.eslintrc.json || grep -q eslintConfig app/package.json"
+
+metadata:
+  importance: "high"
+  estimated_duration: 20
+  can_run_in_ci: true
+  requires_network: false
+  blocks_deployment: false
+  auto_fixable: true

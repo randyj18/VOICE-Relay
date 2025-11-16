@@ -1,0 +1,60 @@
+name: phase2-typescript-compilation
+phase: 2
+goal: "Verify zero TypeScript type errors in codebase"
+category: "quality"
+
+prerequisites:
+  - "Node.js >= 18"
+  - "npm dependencies installed (run: cd app && npm install)"
+  - "TypeScript compiler available"
+
+execution:
+  command: "npm run test:types"
+  working_directory: "app/"
+  timeout: 60
+
+expected_outcome:
+  exit_code: 0
+  stderr_empty: true
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Read TypeScript error output from stderr"
+  - condition: "stderr contains 'error TS'"
+    action: "Fix type errors in the identified files"
+  - condition: "stderr contains 'Cannot find module'"
+    action: "Install missing dependencies or fix import paths"
+
+success_criteria:
+  - "TypeScript compilation completes without errors"
+  - "All .ts and .tsx files are type-checked"
+  - "Exit code is 0"
+  - "No output to stderr"
+
+debugging_steps:
+  - "Read the full TypeScript error output"
+  - "Identify file path and line number (format: src/utils/auth.ts:42)"
+  - "Common issues:"
+  - "  - Implicit 'any' types: Add explicit type annotations"
+  - "  - Missing type definitions: Install @types/* packages"
+  - "  - Wrong import paths: Fix relative/absolute imports"
+  - "  - Strict mode violations: Review tsconfig.json settings"
+  - "Open the identified file and fix the type error"
+  - "Re-run: npm run test:types"
+
+validation:
+  - check: "Node.js version >= 18"
+    command: "node --version | grep -E 'v(1[8-9]|2[0-9])'"
+  - check: "package.json exists"
+    command: "test -f app/package.json"
+  - check: "tsconfig.json exists"
+    command: "test -f app/tsconfig.json"
+  - check: "TypeScript is installed"
+    command: "cd app && npm ls typescript --depth=0"
+
+metadata:
+  importance: "critical"
+  estimated_duration: 30
+  can_run_in_ci: true
+  requires_network: false
+  blocks_deployment: true

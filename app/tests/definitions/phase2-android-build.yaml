@@ -1,0 +1,75 @@
+name: phase2-android-build
+phase: 2
+goal: "Verify Android APK can be built successfully"
+category: "build"
+
+prerequisites:
+  - "Node.js >= 18"
+  - "Java 17"
+  - "Android SDK configured"
+  - "Gradle wrapper available"
+  - "npm dependencies installed"
+
+execution:
+  command: "npm run test:build"
+  working_directory: "app/"
+  timeout: 300  # 5 minutes
+
+expected_outcome:
+  exit_code: 0
+  files_created:
+    - "app/android/app/build/outputs/apk/debug/app-debug.apk"
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Check Gradle build output for errors"
+  - condition: "stderr contains 'JAVA_HOME'"
+    action: "Set JAVA_HOME environment variable to Java 17 installation"
+  - condition: "stderr contains 'SDK location not found'"
+    action: "Configure Android SDK location in local.properties"
+  - condition: "stderr contains 'Gradle daemon'"
+    action: "Kill Gradle daemon and retry: ./gradlew --stop"
+  - condition: "stderr contains 'Out of memory'"
+    action: "Increase Gradle heap size in gradle.properties"
+
+success_criteria:
+  - "Gradle build completes without errors"
+  - "APK file is created at expected location"
+  - "APK is non-zero size (>1MB typically)"
+  - "Exit code is 0"
+
+debugging_steps:
+  - "Read the full Gradle error output"
+  - "Common issues:"
+  - "  Java version:"
+  - "    - Check: java -version"
+  - "    - Expected: Java 17"
+  - "    - Fix: Install Java 17 and set JAVA_HOME"
+  - "  Android SDK:"
+  - "    - Check: echo $ANDROID_HOME"
+  - "    - Fix: Set ANDROID_HOME or create local.properties"
+  - "  Gradle cache:"
+  - "    - Clear: cd app/android && ./gradlew clean"
+  - "    - Stop daemon: ./gradlew --stop"
+  - "  Dependencies:"
+  - "    - Update: ./gradlew --refresh-dependencies"
+  - "  Build cache:"
+  - "    - Clear: rm -rf app/android/.gradle"
+  - "Re-run: npm run test:build"
+
+validation:
+  - check: "Java version is 17"
+    command: "java -version 2>&1 | grep -q '17\\|openjdk version \"17'"
+  - check: "Gradle wrapper exists"
+    command: "test -f app/android/gradlew"
+  - check: "package.json has build script"
+    command: "grep -q 'test:build' app/package.json"
+
+metadata:
+  importance: "critical"
+  estimated_duration: 240  # 4 minutes
+  can_run_in_ci: true
+  requires_network: true  # For downloading dependencies
+  blocks_deployment: true
+  resource_intensive: true
+  can_be_skipped: true  # Use --skip-build flag in test-all.sh

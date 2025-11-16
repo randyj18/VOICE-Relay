@@ -1,0 +1,78 @@
+name: phase1-backend-api
+phase: 1
+goal: "Verify backend API endpoints are accessible and functional"
+category: "integration"
+
+prerequisites:
+  - "Python 3.8+"
+  - "requests library installed (pip install requests)"
+  - "Backend is running (local or production)"
+  - "Network connectivity"
+
+execution:
+  command: "python3 scripts/test_backend.py"
+  working_directory: "."
+  timeout: 120
+
+expected_outcome:
+  exit_code: 0
+  stdout_contains: "PASS"
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Check backend connectivity and error output"
+  - condition: "stdout contains '403 Forbidden'"
+    action: "Replit WAF is blocking - this is expected, use local backend instead"
+  - condition: "stdout contains 'Connection refused'"
+    action: "Backend is not running - start local backend with: cd backend && python main_production.py"
+  - condition: "stdout contains '404 Not Found'"
+    action: "Backend endpoint not found - verify API routes"
+  - condition: "stdout contains '401 Unauthorized'"
+    action: "Authentication issue - check token format in test script"
+  - condition: "stdout contains 'timeout'"
+    action: "Network timeout - check backend URL and network connectivity"
+
+success_criteria:
+  - "All 8 backend endpoints respond"
+  - "Health check returns 200"
+  - "Authentication flow works"
+  - "CORS headers are present"
+  - "Message submission succeeds"
+
+debugging_steps:
+  - "Verify backend is reachable:"
+  - "  curl [backend-url]/docs"
+  - "Check backend logs for errors"
+  - "Common issues:"
+  - "  Replit WAF (403):"
+  - "    - Expected in production"
+  - "    - Use local backend: cd backend && python main_production.py"
+  - "  Connection refused:"
+  - "    - Backend not running"
+  - "    - Start: cd backend && python main_production.py"
+  - "  Wrong URL:"
+  - "    - Check BACKEND_URL in test script"
+  - "    - Verify .env or environment variables"
+  - "  CORS errors:"
+  - "    - Check CORS middleware in backend"
+  - "    - Verify Access-Control-Allow-Origin header"
+  - "Read detailed output: scripts/test-reports/backend.log"
+
+validation:
+  - check: "Python 3.8+"
+    command: "python3 --version | grep -E 'Python 3\\.(8|9|10|11|12)'"
+  - check: "requests library available"
+    command: "python3 -c 'import requests; print(requests.__version__)'"
+  - check: "test script exists"
+    command: "test -f scripts/test_backend.py"
+  - check: "backend folder exists"
+    command: "test -d backend"
+
+metadata:
+  importance: "high"
+  estimated_duration: 45
+  can_run_in_ci: true
+  requires_network: true
+  allow_failure: true  # Due to Replit WAF in production
+  retry_on_failure: 2
+  retry_delay: 5

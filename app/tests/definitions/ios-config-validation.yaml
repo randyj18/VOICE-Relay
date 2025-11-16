@@ -1,0 +1,70 @@
+name: ios-config-validation
+phase: "ios"
+goal: "Validate iOS project configuration without requiring macOS"
+category: "quality"
+
+prerequisites:
+  - "iOS project directory exists (app/ios)"
+  - "Bash shell available"
+
+execution:
+  command: "./scripts/test-ios-config.sh"
+  working_directory: "."
+  timeout: 30
+
+expected_outcome:
+  exit_code: 0
+
+failure_indicators:
+  - condition: "exit_code != 0"
+    action: "Review iOS configuration errors in output"
+  - condition: "stdout contains 'Podfile not found'"
+    action: "Create Podfile for iOS dependencies"
+  - condition: "stdout contains 'Info.plist not found'"
+    action: "Ensure Info.plist exists in ios/VoiceRelay/"
+  - condition: "stdout contains 'Missing permission'"
+    action: "Add required permissions to Info.plist"
+
+success_criteria:
+  - "iOS project structure is valid"
+  - "Podfile exists and has required dependencies"
+  - "Info.plist has voice permissions"
+  - "No iOS-incompatible dependencies"
+  - "Platform-specific code paths exist"
+
+debugging_steps:
+  - "Check iOS directory structure:"
+  - "  ls -la app/ios"
+  - "Common issues:"
+  - "  Missing Podfile:"
+  - "    - Should exist at app/ios/Podfile"
+  - "    - Contains React Native dependencies"
+  - "  Missing Info.plist:"
+  - "    - Should exist at app/ios/VoiceRelay/Info.plist"
+  - "    - Contains app configuration and permissions"
+  - "  Missing permissions:"
+  - "    - NSMicrophoneUsageDescription (for voice input)"
+  - "    - NSSpeechRecognitionUsageDescription (for STT)"
+  - "  iOS-incompatible dependencies:"
+  - "    - Check package.json for platform compatibility"
+  - "    - Look for Android-only packages"
+  - "  No iOS code paths:"
+  - "    - Use Platform.OS === 'ios' checks in code"
+  - "    - Create .ios.ts files for platform-specific code"
+  - "Run: ./scripts/test-ios-config.sh --verbose"
+
+validation:
+  - check: "iOS directory exists"
+    command: "test -d app/ios"
+  - check: "test-ios-config.sh is executable"
+    command: "test -x scripts/test-ios-config.sh"
+  - check: "VoiceRelay project exists"
+    command: "test -d app/ios/VoiceRelay || test -f app/ios/VoiceRelay.xcodeproj/project.pbxproj"
+
+metadata:
+  importance: "high"
+  estimated_duration: 15
+  can_run_in_ci: true
+  requires_network: false
+  requires_macos: false  # Configuration validation only
+  blocks_ios_build: true
